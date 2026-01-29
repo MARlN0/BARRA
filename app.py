@@ -13,65 +13,40 @@ except ImportError:
     st.error("⚠️ Error: FPDF no instalado. Asegúrate de crear requirements.txt")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL (CSS FINAL) ---
-st.set_page_config(page_title="Barra Staff Pro", page_icon="🍸", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL ---
+st.set_page_config(page_title="Barra Staff Pro V22", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
-    /* 1. OCULTAR TOOLBAR Y HEADER */
+    /* OCULTAR ELEMENTOS INNECESARIOS */
     [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
     header { visibility: hidden; }
-    
-    /* 2. QUITAR MARGENES EXCESIVOS */
     .main .block-container { padding-top: 1rem !important; }
 
-    /* 3. OPTIMIZACIÓN MÓVIL */
+    /* OPTIMIZACIÓN MÓVIL */
     @media (max-width: 768px) {
-        .block-container {
-            padding-left: 0.2rem !important;
-            padding-right: 0.2rem !important;
-            padding-bottom: 5rem !important;
-        }
+        .block-container { padding-bottom: 5rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
         div[data-testid="stDataEditor"] table { font-size: 13px !important; }
         div[data-testid="stDataEditor"] th { font-size: 11px !important; padding: 2px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px 1px !important; }
-        div[data-testid="stDataEditor"] div[role="gridcell"] {
-            min-height: 35px !important;
-            height: 35px !important;
-            display: flex;
-            align-items: center;
-        }
-        .stButton button {
-            width: 100% !important;
-            height: 3.5rem !important;
-            border-radius: 8px !important;
-            font-weight: bold !important;
-            background-color: #FF4B4B;
-            color: white;
-            border: none;
-        }
+        div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 35px !important; height: 35px !important; display: flex; align-items: center; }
+        .stButton button { width: 100% !important; height: 3.5rem !important; border-radius: 8px !important; font-weight: bold !important; background-color: #FF4B4B; color: white; border: none; }
     }
 
-    /* TARJETAS */
+    /* ESTILOS DE TARJETAS */
     .plan-card {
-        border: 1px solid rgba(200, 200, 200, 0.3);
-        border-radius: 10px;
-        padding: 8px;
-        margin-bottom: 8px;
-        background-color: rgba(128, 128, 128, 0.05);
+        border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 10px; padding: 8px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05);
     }
     .barra-header {
-        font-size: 1rem; font-weight: 800; text-transform: uppercase;
-        color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px;
+        font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px;
     }
     .fila-rol {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 3px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+        display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);
     }
-    .badge {
-        padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;
-        background-color: rgba(128, 128, 128, 0.15);
-    }
+    .badge { padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background-color: rgba(128, 128, 128, 0.15); }
+    
+    /* ESTILO PARA APOYO (MANUAL) */
+    .apoyo-text { color: #FFA500 !important; font-weight: bold; font-style: italic; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -90,13 +65,13 @@ def check_password():
                     if user == "qiuclub" and password == "barra2026":
                         st.session_state['logged_in'] = True
                         st.rerun()
-                    else: st.error("Datos incorrectos")
+                    else: st.error("Incorrecto")
         return False
     return True
 
 if not check_password(): st.stop()
 
-# --- 3. NUEVO GENERADOR PDF (2 COLUMNAS) ---
+# --- 3. MOTOR PDF (GRILLA 2 COLUMNAS) ---
 if FPDF:
     class PDF(FPDF):
         def header(self):
@@ -107,74 +82,63 @@ if FPDF:
             self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Pag {self.page_no()}', 0, 0, 'C')
 
     def generar_pdf(evento, fecha, plan, banca):
-        pdf = PDF()
-        pdf.add_page()
+        pdf = PDF(); pdf.add_page()
         
         # Titulo
         pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1)
-        pdf.ln(5)
+        pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
         
-        # CONFIGURACIÓN DE GRILLA
-        col_width = 90  # Ancho de cada tarjeta
-        spacing = 10    # Espacio entre columnas
-        start_x_left = 10
-        start_x_right = 10 + col_width + spacing
+        # Configuración de Columnas
+        col_w = 90; gap = 10; x_left = 10; x_right = 10 + col_w + gap
         
-        # Posición inicial Y
-        y_cursor = pdf.get_y()
-        max_y_row = 0 # Para saber cual fue la tarjeta más larga de la fila
-        
-        # Iteramos las barras
+        # Convertir diccionario a lista de tuplas para iterar
         items = list(plan.items())
         
-        for i, (barra, equipo) in enumerate(items):
-            # Verificar si necesitamos nueva página
-            if y_cursor > 250:
-                pdf.add_page()
-                y_cursor = pdf.get_y() + 5
+        # Iterar de 2 en 2 (Pares)
+        for i in range(0, len(items), 2):
+            # Verificar salto de pagina
+            if pdf.get_y() > 240: pdf.add_page()
             
-            # Determinar columna (0 = Izq, 1 = Der)
-            is_right = (i % 2 != 0)
+            y_start = pdf.get_y()
+            max_h = 0
             
-            # Definir X e Y inicial para esta tarjeta
-            current_x = start_x_right if is_right else start_x_left
-            # Si es izquierda, actualizamos el Y cursor (comienzo de nueva fila)
-            # Si es derecha, usamos el Y cursor actual (misma fila)
-            
-            pdf.set_xy(current_x, y_cursor)
-            
-            # --- DIBUJAR TARJETA ---
-            pdf.set_font("Arial", "B", 11)
-            pdf.set_fill_color(230, 230, 230)
-            pdf.cell(col_width, 8, barra, 1, 1, 'L', fill=True) # Header Barra
-            
-            pdf.set_x(current_x) # Reset X para el contenido
+            # --- COLUMNA IZQUIERDA ---
+            bar1, eq1 = items[i]
+            pdf.set_xy(x_left, y_start)
+            pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
+            pdf.cell(col_w, 8, bar1, 1, 1, 'L', fill=True)
             pdf.set_font("Arial", "", 10)
+            for m in eq1:
+                # Limpiamos nombre de rol para PDF
+                rol = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
+                pdf.set_x(x_left)
+                pdf.cell(35, 7, rol, 1)
+                pdf.cell(55, 7, m['Nombre'], 1, 1)
+            h1 = pdf.get_y() - y_start
+            if h1 > max_h: max_h = h1
             
-            for miembro in equipo:
-                rol = miembro['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu")
-                nombre = miembro['Nombre']
-                
-                # Celdas internas
-                pdf.set_x(current_x)
-                pdf.cell(30, 7, rol, 1)
-                pdf.cell(col_width - 30, 7, nombre, 1, 1)
+            # --- COLUMNA DERECHA (Si existe) ---
+            if i + 1 < len(items):
+                bar2, eq2 = items[i+1]
+                pdf.set_xy(x_right, y_start)
+                pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
+                pdf.cell(col_w, 8, bar2, 1, 1, 'L', fill=True)
+                pdf.set_font("Arial", "", 10)
+                for m in eq2:
+                    rol = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
+                    pdf.set_x(x_right)
+                    pdf.cell(35, 7, rol, 1)
+                    pdf.cell(55, 7, m['Nombre'], 1, 1)
+                h2 = pdf.get_y() - y_start
+                if h2 > max_h: max_h = h2
             
-            # Guardar la altura final de esta tarjeta
-            card_end_y = pdf.get_y()
-            if card_end_y > max_y_row:
-                max_y_row = card_end_y
-            
-            # Si es columna derecha, o es el último elemento, bajamos el cursor para la siguiente fila
-            if is_right or i == len(items) - 1:
-                y_cursor = max_y_row + 5 # Espacio vertical entre filas
-                max_y_row = 0 # Reset para nueva fila
+            # Mover cursor abajo para la siguiente fila
+            pdf.set_y(y_start + max_h + 5)
 
         # Banca al final
-        pdf.set_xy(10, y_cursor + 5)
-        pdf.set_fill_color(255, 200, 200)
-        pdf.set_font("Arial", "B", 11)
+        if pdf.get_y() > 250: pdf.add_page()
+        pdf.set_x(10)
+        pdf.set_fill_color(255, 200, 200); pdf.set_font("Arial", "B", 11)
         pdf.cell(0, 8, f"BANCA ({len(banca)})", 1, 1, 'L', fill=True)
         pdf.set_font("Arial", "", 10)
         pdf.multi_cell(0, 7, ", ".join(banca), border=1)
@@ -195,7 +159,7 @@ def cargar_datos():
                     for b in e_d['Barras']: b['matriz_competencias'] = pd.DataFrame(b['matriz_competencias'])
                 return df, evs, data['historial'], data['logs']
         except: pass
-    df = pd.DataFrame({'Nombre': ['Sebastian', 'Sandro'], 'Cargo_Default': ['BARTENDER', 'BARTENDER']})
+    df = pd.DataFrame({'Nombre': ['Ejemplo'], 'Cargo_Default': ['BARTENDER']})
     return df, {}, {}, []
 
 def guardar_datos():
@@ -245,12 +209,12 @@ def ejecutar_algoritmo(nombre_evento):
             
             if val:
                 el = random.choice(val)
-                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el})
+                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el, 'IsSupport': False}) # Added IsSupport Flag
                 tomados.add(el)
                 if check_memoria: n_h[el] = nb
                 return el
             else:
-                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE'})
+                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE', 'IsSupport': False})
                 return None
 
         for _ in range(req['enc']): 
@@ -266,7 +230,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, banca, n_h
 
 # --- 6. APP ---
-st.title("🍸 Barra Staff V1")
+st.title("🍸 Barra Staff V22")
 
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
@@ -420,9 +384,27 @@ with t3:
     
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
         r = st.session_state['res']; st.divider()
+        
+        # --- SECCION APOYO / AFTER (NUEVO) ---
+        with st.expander("➕ Agregar Apoyo / After (Manual)", expanded=False):
+            c_a1, c_a2 = st.columns(2)
+            bar_add = c_a1.selectbox("Barra destino:", list(r['plan'].keys()), key="sel_bar_add")
+            # Listamos todo el staff global, no solo banca
+            all_staff = sorted(st.session_state['db_staff']['Nombre'].tolist())
+            per_add = c_a2.selectbox("Persona:", all_staff, key="sel_per_add")
+            
+            if st.button("Agregar a la Barra", type="secondary", use_container_width=True):
+                # Agregar al plan existente
+                st.session_state['res']['plan'][bar_add].append({
+                    'Rol': 'Apoyo', 'Icon': '⚡', 'Nombre': per_add, 'IsSupport': True
+                })
+                st.success(f"{per_add} agregado a {bar_add}")
+                st.rerun()
+        
+        st.divider()
         if FPDF:
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'], r['banca'])
-            st.download_button("📄 Descargar PDF (2 Cols)", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
+            st.download_button("📄 Descargar PDF", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
         
         edit_mode = st.toggle("✏️ Editar Asignación", key="op_tgl")
         banca_act = sorted(r['banca'])
@@ -431,8 +413,9 @@ with t3:
             with cols[idx % 3]: 
                 st.markdown(f"""<div class="plan-card"><div class="barra-header">{b_nom}</div>""", unsafe_allow_html=True)
                 for i, m in enumerate(eq):
-                    rol = m['Rol']; ic = m.get('Icon', ''); nm = m['Nombre']
-                    if edit_mode:
+                    rol = m['Rol']; ic = m.get('Icon', ''); nm = m['Nombre']; is_supp = m.get('IsSupport', False)
+                    
+                    if edit_mode and not is_supp: # No editamos apoyos manuales con selectbox, solo los borramos o dejamos
                         ops = [nm] + banca_act
                         nnm = st.selectbox(f"{ic} {rol}", ops, index=0, key=f"sl_{b_nom}_{i}", label_visibility="collapsed")
                         if nnm != nm:
@@ -441,16 +424,23 @@ with t3:
                             r['plan'][b_nom][i]['Nombre'] = nnm
                             st.rerun()
                     else:
-                        color = "#FF4B4B" if nm == "VACANTE" else "var(--text-color)"
+                        # Color naranja si es apoyo, rojo si es vacante, normal si no
+                        if nm == "VACANTE": color = "#FF4B4B"
+                        elif is_supp: color = "#FFA500" # Naranja
+                        else: color = "var(--text-color)"
+                        
                         st.markdown(f"""<div class="fila-rol"><span class="badge">{ic} {rol}</span><span style="font-weight:bold; color:{color}">{nm}</span></div>""", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             idx += 1
         st.info(f"Banca: {', '.join(r['banca'])}")
+        
         if st.button("💾 CERRAR FECHA Y GUARDAR", key="op_save", use_container_width=True):
             nu = {}
             for b, eq in r['plan'].items():
                 for m in eq:
-                    if "Encargado" in m['Rol'] and m['Nombre'] != "VACANTE": nu[m['Nombre']] = b
+                    # Solo guardamos historial si es Encargado y NO es apoyo manual
+                    if "Encargado" in m['Rol'] and m['Nombre'] != "VACANTE" and not m.get('IsSupport', False): 
+                        nu[m['Nombre']] = b
             for n, b in nu.items(): st.session_state['db_historial_algoritmo'][r['ev']][n] = b
             log = {'Fecha': str(r['fecha']), 'Evento': r['ev'], 'Plan': r['plan'], 'Banca': list(r['banca'])}
             st.session_state['db_logs_visuales'].append(log)
