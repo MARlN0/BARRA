@@ -5,6 +5,8 @@ from datetime import date
 import json
 import os
 import base64
+from PIL import Image, ImageDraw, ImageFont # LIBRERÍA IMAGEN
+import io
 
 # Validación FPDF
 try:
@@ -13,33 +15,48 @@ except ImportError:
     st.error("⚠️ Error: FPDF no instalado. Crea requirements.txt en GitHub.")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL (AJUSTADA AL MILÍMETRO) ---
-st.set_page_config(page_title="Barra Staff V27", page_icon="🍸", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL (CSS AJUSTADO) ---
+st.set_page_config(page_title="Barra Staff V28", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
+    /* OCULTAR TOOLBAR */
     [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
     header { visibility: hidden; }
     .main .block-container { padding-top: 1rem !important; }
 
+    /* OPTIMIZACIÓN CELULAR */
     @media (max-width: 768px) {
         .block-container { 
             padding-left: 0.1rem !important; 
             padding-right: 0.1rem !important; 
             padding-bottom: 5rem !important; 
         }
+        /* TABLA */
         div[data-testid="stDataEditor"] table { font-size: 11px !important; }
-        div[data-testid="stDataEditor"] th { font-size: 10px !important; padding: 1px !important; text-align: center !important; }
-        div[data-testid="stDataEditor"] td { padding: 0px 0px !important; line-height: 1.0 !important; }
-        div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 30px !important; height: 30px !important; display: flex; align-items: center; }
+        div[data-testid="stDataEditor"] th { 
+            font-size: 10px !important; 
+            padding: 1px !important; 
+            text-align: center !important;
+        }
+        div[data-testid="stDataEditor"] td { 
+            padding: 0px 0px !important;
+            line-height: 1.0 !important;
+        }
+        div[data-testid="stDataEditor"] div[role="gridcell"] { 
+            min-height: 30px !important; 
+            height: 30px !important; 
+            display: flex; 
+            align-items: center; 
+        }
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; background-color: #FF4B4B; color: white; border: none; }
     }
 
+    /* TARJETAS */
     .plan-card { border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 12px; padding: 10px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05); }
     .barra-header { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px; }
     .fila-rol { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1); }
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background-color: rgba(128, 128, 128, 0.15); }
-    .apoyo-text { color: #FFA500 !important; font-weight: bold; font-style: italic; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +81,7 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# --- 3. PDF ---
+# --- 3. PDF (TODO NEGRO) ---
 if FPDF:
     class PDF(FPDF):
         def header(self):
@@ -79,24 +96,34 @@ if FPDF:
         col_w = 90; gap = 10; x_left = 10; x_right = 10 + col_w + gap
         items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True) 
         
+        # COLOR TEXTO NEGRO SIEMPRE
+        pdf.set_text_color(0, 0, 0) 
+        
         for i in range(0, len(items), 2):
             if pdf.get_y() > 240: pdf.add_page()
             y_start = pdf.get_y(); max_h = 0
+            
             # IZQ
-            b1, e1 = items[i]; pdf.set_xy(x_left, y_start); pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
-            pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+            b1, e1 = items[i]
+            pdf.set_xy(x_left, y_start); pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
+            pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True)
+            pdf.set_font("Arial", "", 10)
             for m in e1:
                 r = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
                 pdf.set_x(x_left); pdf.cell(35, 7, r, 1); pdf.cell(55, 7, m['Nombre'], 1, 1)
             h1 = pdf.get_y() - y_start; max_h = max(max_h, h1)
+            
             # DER
             if i+1 < len(items):
-                b2, e2 = items[i+1]; pdf.set_xy(x_right, y_start); pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
-                pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+                b2, e2 = items[i+1]
+                pdf.set_xy(x_right, y_start); pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
+                pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True)
+                pdf.set_font("Arial", "", 10)
                 for m in e2:
                     r = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
                     pdf.set_x(x_right); pdf.cell(35, 7, r, 1); pdf.cell(55, 7, m['Nombre'], 1, 1)
                 h2 = pdf.get_y() - y_start; max_h = max(max_h, h2)
+            
             pdf.set_y(y_start + max_h + 5)
 
         if pdf.get_y() > 250: pdf.add_page()
@@ -105,9 +132,7 @@ if FPDF:
         pdf.set_font("Arial", "", 10); pdf.multi_cell(0, 7, ", ".join(banca), border=1)
         return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- 4. MOTOR IMAGEN ---
-from PIL import Image, ImageDraw, ImageFont
-import io
+# --- 4. MOTOR IMAGEN (TODO NEGRO) ---
 def generar_imagen(evento, fecha, plan, banca):
     WIDTH = 800; PADDING = 20; COL_W = (WIDTH-(PADDING*3))//2; ROW_H = 30; HEAD_H = 35
     items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
@@ -121,6 +146,7 @@ def generar_imagen(evento, fecha, plan, banca):
     img = Image.new('RGB', (WIDTH, tot_h), 'white'); draw = ImageDraw.Draw(img)
     try: font_b = ImageFont.truetype("arialbd.ttf", 14); font_r = ImageFont.truetype("arial.ttf", 14); font_t = ImageFont.truetype("arial.ttf", 24)
     except: font_b = font_r = font_t = ImageFont.load_default()
+    
     draw.text((PADDING, 20), f"{evento} | {fecha}", fill="black", font=font_t)
     draw.line((PADDING, 60, WIDTH-PADDING, 60), fill="black", width=2)
     cur_y = 80
@@ -135,7 +161,10 @@ def generar_imagen(evento, fecha, plan, banca):
             r = m['Rol'].replace("👑","Jefe").replace("🍺","Bar").replace("🧊","Ayu").replace("⚡","Apoyo")
             draw.rectangle([x, cy, x+80, cy+ROW_H], outline="gray"); draw.text((x+5, cy+5), r, fill="black", font=font_r)
             draw.rectangle([x+80, cy, x+COL_W, cy+ROW_H], outline="gray")
-            c_nm = "red" if m['Nombre']=="VACANTE" else ("#D2691E" if m.get('IsSupport') else "black")
+            
+            # COLOR LOGIC: SIEMPRE NEGRO A MENOS QUE SEA VACANTE (ROJO)
+            c_nm = "red" if m['Nombre']=="VACANTE" else "black"
+            
             draw.text((x+85, cy+5), m['Nombre'], fill=c_nm, font=font_b)
             cy+=ROW_H
         max_row = max(max_row, cy-cur_y)
@@ -149,7 +178,7 @@ def generar_imagen(evento, fecha, plan, banca):
                 r = m['Rol'].replace("👑","Jefe").replace("🍺","Bar").replace("🧊","Ayu").replace("⚡","Apoyo")
                 draw.rectangle([x, cy, x+80, cy+ROW_H], outline="gray"); draw.text((x+5, cy+5), r, fill="black", font=font_r)
                 draw.rectangle([x+80, cy, x+COL_W, cy+ROW_H], outline="gray")
-                c_nm = "red" if m['Nombre']=="VACANTE" else ("#D2691E" if m.get('IsSupport') else "black")
+                c_nm = "red" if m['Nombre']=="VACANTE" else "black"
                 draw.text((x+85, cy+5), m['Nombre'], fill=c_nm, font=font_b)
                 cy+=ROW_H
             max_row = max(max_row, cy-cur_y)
@@ -202,10 +231,9 @@ def ejecutar_algoritmo(nombre_evento):
     asig = {}; tomados = set(); n_h = {}
     for barra in d['Barras']:
         nb = barra['nombre']; req = barra['requerimientos']; m = barra['matriz_competencias']
-        # --- AQUÍ ESTÁ EL TRUCO DE SINCRONIZACIÓN ---
-        # Filtramos la matriz guardada para que SOLO incluya gente que HOY está en Staff_Convocado
-        gente_valida_hoy = d['Staff_Convocado'] # Lista strings
-        m = m[m['Nombre'].isin(gente_valida_hoy)]
+        # SYNC: Usar solo gente habilitada HOY
+        gente_valida = d['Staff_Convocado']
+        m = m[m['Nombre'].isin(gente_valida)]
         
         eq = []; pool = m[~m['Nombre'].isin(tomados)].copy()
         
@@ -229,7 +257,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
 
 # --- 7. UI ---
-st.title("🍸 Barra Staff V27")
+st.title("🍸 Barra Staff V28")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -257,7 +285,9 @@ with t1:
                  column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d")})
 
 with t2:
-    with st.expander("🆕 Evento"):
+    # SECCION CREAR / ELIMINAR EVENTO
+    c_e1, c_e2 = st.columns([3, 1])
+    with c_e1.expander("🆕 Crear Evento"):
         ne = st.text_input("Nombre", key="cf_ne")
         if st.button("Crear", key="cf_bc", use_container_width=True):
             if ne not in st.session_state['db_eventos']:
@@ -268,13 +298,22 @@ with t2:
     if not lev: st.stop()
     ev = st.selectbox("Evento:", lev, key="cf_se"); dat = st.session_state['db_eventos'][ev]
     
-    st.markdown("##### 1. Plantilla")
+    # BOTON ELIMINAR EVENTO
+    with st.expander(f"🗑️ Eliminar Evento '{ev}'"):
+        st.warning("Esta acción borrará toda la configuración de este evento.")
+        if st.button("Confirmar Eliminación", type="primary"):
+            del st.session_state['db_eventos'][ev]
+            if ev in st.session_state['db_historial_algoritmo']: del st.session_state['db_historial_algoritmo'][ev]
+            guardar_datos(); st.rerun()
+
+    st.markdown("##### 1. Plantilla (Selección)")
     df_b = ordenar_staff(st.session_state['db_staff'])
     conv = set(dat['Staff_Convocado'])
     df_b.insert(0, 'OK', df_b['Nombre'].apply(lambda x: x in conv))
+    
     st.caption(f"👥 Seleccionados: **{len(dat['Staff_Convocado'])}** / {len(df_b)}")
     
-    # ORDEN: N | Check | Nombre (Rol oculto pero util para ordenar)
+    # AQUI MOSTRAMOS EL ROL (SOLO AQUI)
     df_b = df_b[['OK', 'Nombre', 'Cargo_Default']] 
     df_b = agregar_indice(df_b)
     
@@ -284,10 +323,10 @@ with t2:
             column_config={
                 "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
                 "OK": st.column_config.CheckboxColumn("✅", width="small"),
-                "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True),
-                "Cargo_Default": None # OCULTO
+                "Nombre": st.column_config.TextColumn("Nombre", width="medium", disabled=True),
+                "Cargo_Default": st.column_config.TextColumn("Rol", width="small", disabled=True) # ROL VISIBLE
             },
-            disabled=["N°", "Nombre"], use_container_width=True, hide_index=True, height=calc_altura(df_b)
+            disabled=["N°", "Nombre", "Cargo_Default"], use_container_width=True, hide_index=True, height=calc_altura(df_b)
         )
         if st.form_submit_button("💾 Guardar Plantilla", use_container_width=True):
             st.session_state['db_eventos'][ev]['Staff_Convocado'] = df_ed[df_ed['OK']==True]['Nombre'].tolist(); guardar_datos(); st.rerun()
@@ -300,9 +339,10 @@ with t2:
                 nb = st.text_input("Nombre", key="bn"); c1, c2, c3 = st.columns(3)
                 ne = c1.number_input("E", 0, 5, 1, key="be"); nba = c2.number_input("B", 0, 5, 1, key="bb"); nay = c3.number_input("A", 0, 5, 1, key="ba")
                 
-                # Crear Matriz con la gente de plantilla
                 df_m = df_b[df_b['Nombre'].isin(lok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
+                
+                # AQUI OCULTAMOS ROL PARA AHORRAR ESPACIO
                 df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                 df_m = agregar_indice(df_m)
                 
@@ -316,7 +356,8 @@ with t2:
                     })
                 if st.form_submit_button("Guardar", use_container_width=True):
                     if nb:
-                        st.session_state['db_eventos'][ev]['Barras'].append({'nombre': nb, 'requerimientos': {'enc': ne, 'bar': nba, 'ayu': nay}, 'matriz_competencias': mo.drop('N°', axis=1)})
+                        mo_cl = mo.drop(['N°'], axis=1)
+                        st.session_state['db_eventos'][ev]['Barras'].append({'nombre': nb, 'requerimientos': {'enc': ne, 'bar': nba, 'ayu': nay}, 'matriz_competencias': mo_cl})
                         guardar_datos(); st.rerun()
 
         for i, barra in enumerate(dat['Barras']):
@@ -325,38 +366,18 @@ with t2:
                     nnb = st.text_input("Nombre", barra['nombre'], key=f"en_{i}"); c1, c2, c3 = st.columns(3); req = barra['requerimientos']
                     nne = c1.number_input("E", 0, 5, req['enc'], key=f"ee_{i}"); nnba = c2.number_input("B", 0, 5, req['bar'], key=f"eb_{i}"); nnay = c3.number_input("A", 0, 5, req['ayu'], key=f"ea_{i}")
                     
-                    # --- SINCRONIZACIÓN INTELIGENTE (SMART MERGE) ---
-                    # 1. Traemos la matriz guardada
-                    df_guardado = barra['matriz_competencias']
-                    
-                    # 2. Traemos la lista REAL de la plantilla actual
-                    lista_real = lok # Esta es la lista actualizada del paso 1
-                    
-                    # 3. Creamos DataFrame de la lista real (para que tenga estructura)
-                    # Necesitamos el Cargo_Default para los nuevos
-                    df_global = st.session_state['db_staff']
-                    df_real_base = df_global[df_global['Nombre'].isin(lista_real)][['Nombre', 'Cargo_Default']]
-                    
-                    # 4. CRUCE (MERGE): 
-                    # Izquierda (Real) mantiene a todos los de la plantilla.
-                    # Derecha (Guardado) aporta los checks viejos.
-                    # Si alguien no está en Real (se quitó de plantilla), desaparece.
-                    # Si alguien es nuevo, sus checks vendrán vacíos (NaN).
-                    df_sync = pd.merge(df_real_base, df_guardado, on="Nombre", how="left")
-                    
-                    # 5. Rellenar valores para los NUEVOS
-                    # Si 'Es_Encargado' es NaN, ponemos False.
-                    # Si 'Es_Bartender' es NaN, ponemos True si su cargo es Bartender.
+                    df_base = barra['matriz_competencias'].copy()
+                    # SYNC LOGIC
+                    df_real = st.session_state['db_staff'][st.session_state['db_staff']['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
+                    df_sync = pd.merge(df_real, df_base, on="Nombre", how="left")
                     df_sync['Es_Encargado'] = df_sync['Es_Encargado'].fillna(False)
-                    df_sync['Es_Bartender'] = df_sync['Es_Bartender'].fillna(df_sync['Cargo_Default'] == 'BARTENDER')
-                    df_sync['Es_Ayudante'] = df_sync['Es_Ayudante'].fillna(df_sync['Cargo_Default'] == 'AYUDANTE')
+                    df_sync['Es_Bartender'] = df_sync['Es_Bartender'].fillna(df_sync['Cargo_Default']=='BARTENDER')
+                    df_sync['Es_Ayudante'] = df_sync['Es_Ayudante'].fillna(df_sync['Cargo_Default']=='AYUDANTE')
                     
-                    # 6. Ordenar y Limpiar
-                    df_sync = ordenar_staff(df_sync) # Re-ordenar alfabeticamente/cargo
-                    df_sync = df_sync[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] # Quitar Cargo_Default
+                    df_sync = ordenar_staff(df_sync)
+                    df_sync = df_sync[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] # SOLO COLUMNAS NECESARIAS
                     df_sync = agregar_indice(df_sync)
                     
-                    # 7. Mostrar
                     me = st.data_editor(df_sync, use_container_width=True, hide_index=True, height=calc_altura(df_sync),
                         column_config={
                             "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
@@ -365,7 +386,6 @@ with t2:
                             "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"),
                             "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small")
                         })
-                        
                     if st.form_submit_button("Actualizar", use_container_width=True):
                         st.session_state['db_eventos'][ev]['Barras'][i] = {'nombre': nnb, 'requerimientos': {'enc': nne, 'bar': nnba, 'ayu': nnay}, 'matriz_competencias': me.drop('N°', axis=1)}
                         guardar_datos(); st.rerun()
