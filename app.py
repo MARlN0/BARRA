@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V29", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V30", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -89,7 +89,6 @@ if FPDF:
             self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Pag {self.page_no()}', 0, 0, 'C')
 
     def generar_pdf(evento, fecha, plan):
-        # NOTA: Eliminamos el argumento 'banca' del PDF final
         pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
         
@@ -125,12 +124,28 @@ if FPDF:
             
             pdf.set_y(y_start + max_h + 5)
         
-        # YA NO IMPRIMIMOS LA BANCA AL FINAL DEL PDF
         return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- 4. MOTOR IMAGEN (SIN BANCA) ---
-from PIL import Image, ImageDraw, ImageFont
-import io
+# --- 4. MOTOR IMAGEN (FUENTE FIX) ---
+def get_font(size, is_bold=False):
+    """Busca fuentes compatibles con Ñ y Tildes en el servidor"""
+    # Lista de fuentes comunes en Linux (Streamlit Cloud) y Windows
+    font_candidates = [
+        "DejaVuSans-Bold.ttf" if is_bold else "DejaVuSans.ttf", # Mejor opción Linux
+        "LiberationSans-Bold.ttf" if is_bold else "LiberationSans-Regular.ttf",
+        "arialbd.ttf" if is_bold else "arial.ttf", # Windows
+        "Verdana.ttf"
+    ]
+    
+    for font_name in font_candidates:
+        try:
+            return ImageFont.truetype(font_name, size)
+        except OSError:
+            continue
+            
+    # Fallback al default (puede fallar con tildes, pero es el ultimo recurso)
+    return ImageFont.load_default()
+
 def generar_imagen(evento, fecha, plan):
     WIDTH = 800; PADDING = 20; COL_W = (WIDTH-(PADDING*3))//2; ROW_H = 30; HEAD_H = 35
     items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
@@ -140,12 +155,14 @@ def generar_imagen(evento, fecha, plan):
         h2 = HEAD_H + (len(items[i+1][1])*ROW_H) if i+1<len(items) else 0
         cur_y += max(h1, h2) + PADDING
     
-    # Altura solo hasta las barras, sin banca extra
     tot_h = cur_y + PADDING
     
     img = Image.new('RGB', (WIDTH, tot_h), 'white'); draw = ImageDraw.Draw(img)
-    try: font_b = ImageFont.truetype("arialbd.ttf", 14); font_r = ImageFont.truetype("arial.ttf", 14); font_t = ImageFont.truetype("arial.ttf", 24)
-    except: font_b = font_r = font_t = ImageFont.load_default()
+    
+    # CARGAR FUENTES SEGURAS
+    font_t = get_font(24, True)
+    font_b = get_font(14, True)
+    font_r = get_font(14, False)
     
     draw.text((PADDING, 20), f"{evento} | {fecha}", fill="black", font=font_t)
     draw.line((PADDING, 60, WIDTH-PADDING, 60), fill="black", width=2)
@@ -250,7 +267,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
 
 # --- 7. UI ---
-st.title("🍸 Barra Staff V29")
+st.title("🍸 Barra Staff V30")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -282,9 +299,14 @@ with t2:
     with c_e1.expander("🆕 Crear Evento"):
         ne = st.text_input("Nombre", key="cf_ne")
         if st.button("Crear", key="cf_bc", use_container_width=True):
-            if ne not in st.session_state['db_eventos']:
+            # CHECK DUPLICADO
+            if ne in st.session_state['db_eventos']:
+                st.error(f"🚫 El evento '{ne}' ya existe.")
+            elif ne:
                 st.session_state['db_eventos'][ne] = {'Staff_Convocado': [], 'Barras': []}
-                st.session_state['db_historial_algoritmo'][ne] = {}; guardar_datos(); st.rerun()
+                st.session_state['db_historial_algoritmo'][ne] = {}; guardar_datos()
+                st.success(f"✅ Evento '{ne}' creado exitosamente.")
+                st.rerun()
 
     lev = list(st.session_state['db_eventos'].keys())
     if not lev: st.stop()
@@ -331,6 +353,7 @@ with t2:
                 
                 df_m = df_b[df_b['Nombre'].isin(lok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
+                
                 df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                 df_m = agregar_indice(df_m)
                 
@@ -393,11 +416,11 @@ with t3:
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
         r = st.session_state['res']; st.divider()
         
-        # --- BANCA AL INICIO (OPERACION) ---
+        # --- BANCA AL INICIO ---
         if r['banca']:
-            st.warning(f"⚠️ **PERSONAL EN BANCA ({len(r['banca'])}):** {', '.join(r['banca'])}")
+            st.warning(f"⚠️ **BANCA:** {', '.join(r['banca'])}")
         else:
-            st.success("✅ Todo el personal ha sido asignado.")
+            st.success("✅ Todo asignado")
         st.divider()
 
         with st.expander("➕ Apoyo / After (Manual)", expanded=False):
@@ -411,10 +434,8 @@ with t3:
         
         c_pdf, c_img = st.columns(2)
         if FPDF:
-            # PASAMOS SOLO PLAN, NO BANCA
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'])
             c_pdf.download_button("📄 PDF", pdf_data, f"Plan.pdf", "application/pdf", type="primary", use_container_width=True)
-        # PASAMOS SOLO PLAN, NO BANCA
         img_data = generar_imagen(r['ev'], str(r['fecha']), r['plan'])
         c_img.download_button("📷 IMG", img_data, f"Plan.png", "image/png", type="primary", use_container_width=True)
         
