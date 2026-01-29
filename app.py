@@ -5,74 +5,90 @@ from datetime import date
 import json
 import os
 
-# --- 1. CONFIGURACIÓN E INYECCIÓN DE CSS (ULTRA COMPACTO V16) ---
-st.set_page_config(page_title="ERP Staff V16", page_icon="📲", layout="wide")
+# --- 1. CONFIGURACIÓN E INYECCIÓN DE CSS (MOBILE FIRST & BRANDING) ---
+st.set_page_config(page_title="Barra Staff V1", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
-    /* OPTIMIZACIÓN MÓVIL */
+    /* --- OPTIMIZACIÓN MÓVIL EXTREMA --- */
     @media (max-width: 768px) {
         .block-container {
-            padding-top: 0.5rem !important;
-            padding-bottom: 5rem !important; /* Espacio para scroll final */
-            padding-left: 0.1rem !important;
-            padding-right: 0.1rem !important;
+            padding-top: 1rem !important;
+            padding-bottom: 5rem !important;
+            padding-left: 0.2rem !important;
+            padding-right: 0.2rem !important;
         }
         
         /* FUENTE Y ESPACIADO DE TABLA */
         div[data-testid="stDataEditor"] table {
-            font-size: 12px !important;
+            font-size: 13px !important;
         }
         div[data-testid="stDataEditor"] th {
-            padding: 2px !important; 
-            font-size: 10px !important;
-            max-width: 50px !important; /* Forzar cabeceras estrechas */
+            font-size: 11px !important;
+            padding: 4px !important;
         }
         div[data-testid="stDataEditor"] td {
-            padding: 0px 2px !important;
-            line-height: 1.1 !important;
+            padding: 0px 4px !important;
+            line-height: 1.2 !important;
         }
         
-        /* Altura de fila mínima */
+        /* Altura mínima de celda reducida para que quepan más */
         div[data-testid="stDataEditor"] div[role="gridcell"] {
-            min-height: 28px !important;
-            height: 28px !important;
+            min-height: 35px !important;
+            height: 35px !important;
             display: flex;
             align-items: center;
+        }
+        
+        /* Títulos */
+        h1 { font-size: 1.8rem !important; }
+        h2, h3 { font-size: 1.2rem !important; }
+        
+        /* Botones grandes */
+        .stButton button {
+            width: 100% !important;
+            height: 3rem !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
         }
     }
 
     /* ESTILOS GENERALES */
     .stDataFrame { border: 1px solid rgba(128, 128, 128, 0.2); border-radius: 8px; }
+    
+    /* TARJETAS DE PLANIFICACIÓN */
     .plan-card {
         border: 1px solid rgba(200, 200, 200, 0.3);
-        border-radius: 8px;
-        padding: 8px;
-        margin-bottom: 8px;
-        background-color: rgba(100, 100, 100, 0.05);
+        border-radius: 12px;
+        padding: 10px;
+        margin-bottom: 12px;
+        background-color: rgba(128, 128, 128, 0.05);
     }
+    
     .barra-header {
-        font-size: 1rem;
+        font-size: 1.1rem;
         font-weight: 800;
         text-transform: uppercase;
         color: var(--text-color);
-        border-bottom: 2px solid #FF4B4B;
-        margin-bottom: 4px;
-        padding-bottom: 2px;
+        border-bottom: 3px solid #FF4B4B;
+        margin-bottom: 8px;
+        padding-bottom: 4px;
+        letter-spacing: 1px;
     }
+    
     .fila-rol {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 3px 0; 
+        padding: 5px 0; 
         border-bottom: 1px solid rgba(128, 128, 128, 0.1);
     }
     .badge {
-        padding: 1px 4px;
-        border-radius: 3px;
-        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.8rem;
         font-weight: bold;
-        background-color: rgba(128, 128, 128, 0.1);
+        background-color: rgba(128, 128, 128, 0.15);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -137,6 +153,11 @@ def agregar_indice(df):
     df_new.insert(0, "N°", range(1, len(df_new) + 1))
     return df_new
 
+def calc_altura(df):
+    # Fórmula mágica: (Filas * 35px) + Cabecera(38px) + Borde(3px)
+    # Esto asegura que la tabla se vea ENTERA sin scroll interno.
+    return (len(df) * 35) + 41
+
 def ejecutar_algoritmo(nombre_evento):
     datos = st.session_state['db_eventos'][nombre_evento]
     hist = st.session_state['db_historial_algoritmo'].get(nombre_evento, {})
@@ -193,13 +214,13 @@ def ejecutar_algoritmo(nombre_evento):
     return asignacion, banca, new_hist
 
 # --- 4. INTERFAZ GRÁFICA ---
-st.title("🏭 ERP Staff V16")
+st.title("🍸 Barra Staff V1")
 
-tab1, tab2, tab3, tab4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
+tab1, tab2, tab3, tab4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Historial"])
 
 # TAB 1: RH
 with tab1:
-    with st.expander("➕ Alta / Baja"):
+    with st.expander("➕ Gestionar Personal (Alta/Baja)"):
         c1, c2 = st.columns(2)
         nn = c1.text_input("Nombre", key="rh_in_name")
         nr = c2.selectbox("Cargo", ["BARTENDER", "AYUDANTE"], key="rh_in_role")
@@ -210,32 +231,36 @@ with tab1:
                 guardar_datos()
                 st.rerun()
         
+        st.divider()
         df_del = ordenar_staff(st.session_state['db_staff'])
-        list_del = st.multiselect("Eliminar:", df_del['Nombre'].tolist(), key="rh_multi_del")
-        if st.button("🚨 Eliminar", key="rh_btn_del", use_container_width=True):
+        list_del = st.multiselect("Eliminar Personal:", df_del['Nombre'].tolist(), key="rh_multi_del")
+        if st.button("🚨 Eliminar Seleccionados", key="rh_btn_del", use_container_width=True):
             st.session_state['db_staff'] = st.session_state['db_staff'][~st.session_state['db_staff']['Nombre'].isin(list_del)]
             guardar_datos()
             st.rerun()
 
-    st.caption("Nómina")
+    st.subheader("Nómina Completa")
     df_v = ordenar_staff(st.session_state['db_staff'])
     df_v = agregar_indice(df_v)
+    
+    # Altura dinámica para ver TODO sin scroll interno
+    h_nomina = calc_altura(df_v)
     
     st.dataframe(
         df_v, 
         use_container_width=True, 
         hide_index=True, 
-        height=(len(df_v)+1)*30+3,
+        height=h_nomina, # <--- ALTURA CALCULADA
         column_config={
             "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
-            "Nombre": st.column_config.TextColumn("Nombre", width="small"), # <-- AQUI ESTA EL TRUCO
+            "Nombre": st.column_config.TextColumn("Nombre", width="small"),
             "Cargo_Default": st.column_config.TextColumn("Cargo", width="small")
         }
     )
 
 # TAB 2: CONFIG
 with tab2:
-    with st.expander("🆕 Evento"):
+    with st.expander("🆕 Nuevo Evento"):
         ne = st.text_input("Nombre", key="conf_in_ev")
         if st.button("Crear", key="conf_btn_cre", use_container_width=True):
             if ne and ne not in st.session_state['db_eventos']:
@@ -250,41 +275,44 @@ with tab2:
     dat = st.session_state['db_eventos'][ev]
     
     # 1. PLANTILLA
-    st.markdown("##### 1. Plantilla")
+    st.divider()
+    st.markdown("##### 1. Plantilla Habilitada")
+    st.caption("Selecciona quiénes pueden trabajar en este evento.")
     df_b = ordenar_staff(st.session_state['db_staff'])
     conv = set(dat['Staff_Convocado'])
     df_b.insert(0, 'OK', df_b['Nombre'].apply(lambda x: x in conv))
     df_b = agregar_indice(df_b)
     
     with st.form("f_plantilla"):
+        h_plant = calc_altura(df_b)
         df_editado = st.data_editor(
             df_b,
             column_config={
                 "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
                 "OK": st.column_config.CheckboxColumn("✅", width="small"),
-                "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True), # <-- SMALL PARA JUNTAR
+                "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True),
                 "Cargo_Default": None
             },
             disabled=["N°", "Nombre"],
             use_container_width=True,
             hide_index=True,
-            height=(len(df_b)+1)*30+3,
+            height=h_plant, # <--- ALTURA CALCULADA
             key="editor_plantilla"
         )
-        if st.form_submit_button("💾 Guardar", use_container_width=True):
+        if st.form_submit_button("💾 Guardar Plantilla", use_container_width=True):
             lista = df_editado[df_editado['OK']==True]['Nombre'].tolist()
             st.session_state['db_eventos'][ev]['Staff_Convocado'] = lista
             guardar_datos()
             st.rerun()
 
     # 2. BARRAS
-    st.markdown("##### 2. Barras")
+    st.markdown("##### 2. Configuración de Barras")
     lista_ok = dat['Staff_Convocado']
     
     if lista_ok:
-        with st.expander("➕ Crear Barra"):
+        with st.expander("➕ Crear Nueva Barra"):
             with st.form("f_barra"):
-                nb = st.text_input("Nombre", key="bar_new_name")
+                nb = st.text_input("Nombre Barra", key="bar_new_name")
                 c1, c2, c3 = st.columns(3)
                 ne = c1.number_input("Enc", 0, 5, 1, key="bar_new_e")
                 nba = c2.number_input("Bar", 0, 5, 1, key="bar_new_b")
@@ -299,21 +327,23 @@ with tab2:
                 df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                 df_m = agregar_indice(df_m)
                 
+                h_mat = calc_altura(df_m)
+                
                 mo = st.data_editor(
                     df_m,
                     column_config={
                         "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
-                        "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True), # <-- SMALL
+                        "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True),
                         "Es_Encargado": st.column_config.CheckboxColumn("👑", width="small"),
                         "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"),
                         "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small"),
                     },
                     use_container_width=True,
                     hide_index=True,
-                    height=(len(df_m)+1)*30+3,
+                    height=h_mat, # <--- ALTURA CALCULADA
                     key="editor_new_bar_matrix"
                 )
-                if st.form_submit_button("Guardar", use_container_width=True):
+                if st.form_submit_button("Crear Barra", use_container_width=True):
                     if nb:
                         mo_clean = mo.drop('N°', axis=1)
                         nueva = {'nombre': nb, 'requerimientos': {'enc': ne, 'bar': nba, 'ayu': nay}, 'matriz_competencias': mo_clean}
@@ -333,16 +363,18 @@ with tab2:
                     df_edit_base = barra['matriz_competencias'][['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                     df_edit_base = agregar_indice(df_edit_base)
                     
+                    h_edit_mat = calc_altura(df_edit_base)
+                    
                     me = st.data_editor(
                         df_edit_base,
                         column_config={
                             "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
-                            "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True), # <-- SMALL
+                            "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True),
                             "Es_Encargado": st.column_config.CheckboxColumn("👑", width="small"),
                             "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"),
                             "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small"),
                         },
-                        use_container_width=True, hide_index=True, height=(len(df_edit_base)+1)*30+3,
+                        use_container_width=True, hide_index=True, height=h_edit_mat,
                         key=f"editor_mx_{i}"
                     )
                     if st.form_submit_button("Actualizar", use_container_width=True):
@@ -350,7 +382,7 @@ with tab2:
                         st.session_state['db_eventos'][ev]['Barras'][i] = {'nombre': nnb, 'requerimientos': {'enc': nne, 'bar': nnba, 'ayu': nnay}, 'matriz_competencias': me_clean}
                         guardar_datos()
                         st.rerun()
-                if st.button("Borrar", key=f"del_b_{i}", use_container_width=True):
+                if st.button("Borrar Barra", key=f"del_b_{i}", use_container_width=True):
                     st.session_state['db_eventos'][ev]['Barras'].pop(i)
                     guardar_datos()
                     st.rerun()
@@ -371,7 +403,7 @@ with tab3:
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
         r = st.session_state['res']
         st.divider()
-        edit_mode = st.toggle("✏️ Editar", key="op_tgl")
+        edit_mode = st.toggle("✏️ Editar Asignación", key="op_tgl")
         banca_act = sorted(r['banca'])
         cols = st.columns(3)
         idx = 0
@@ -412,12 +444,25 @@ with tab3:
 with tab4:
     logs = st.session_state['db_logs_visuales']
     if logs:
-        for log in reversed(logs):
-            with st.expander(f"{log['Fecha']} - {log['Evento']}"):
+        # Iteramos en reverso para ver lo último primero
+        # Usamos enumerate para saber qué índice borrar en la lista original
+        for i, log in enumerate(reversed(logs)):
+            # Calculamos el índice real en la lista original
+            real_index = len(logs) - 1 - i
+            
+            with st.expander(f"📅 {log['Fecha']} - {log['Evento']}"):
+                c_del, c_cont = st.columns([1, 4])
+                
+                # BOTÓN DE ELIMINAR
+                if c_del.button("🗑️ Eliminar", key=f"del_log_{real_index}", type="primary", use_container_width=True):
+                    st.session_state['db_logs_visuales'].pop(real_index)
+                    guardar_datos()
+                    st.rerun()
+                
                 for b, eq in log['Plan'].items():
                     st.markdown(f"**{b}**")
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
                     st.divider()
                 st.caption(f"Banca: {', '.join(log['Banca'])}")
     else:
-        st.write("Sin historial.")
+        st.info("No hay historial guardado.")
