@@ -8,34 +8,41 @@ import base64
 from PIL import Image, ImageDraw, ImageFont
 import io
 
-# --- 0. VALIDACIÓN ---
+# --- 0. VALIDACIÓN DE LIBRERÍAS ---
 try:
     from fpdf import FPDF
 except ImportError:
-    st.error("⚠️ Falta FPDF. Crea requirements.txt con: fpdf")
+    st.error("⚠️ Falta FPDF. Por favor crea el archivo requirements.txt en GitHub con: fpdf")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V35", page_icon="🍸", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL (ESTILO APP NATIVA) ---
+st.set_page_config(page_title="Barra Staff V36", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
+    /* Ocultar elementos de sistema */
     [data-testid="stElementToolbar"] { display: none !important; }
     header { visibility: hidden; }
     .main .block-container { padding-top: 1rem !important; }
 
+    /* ESTILOS MÓVILES */
     @media (max-width: 768px) {
         .block-container { padding-bottom: 6rem !important; padding-left: 0.2rem; padding-right: 0.2rem; }
+        
+        /* Tablas compactas */
         div[data-testid="stDataEditor"] table { font-size: 12px !important; }
         div[data-testid="stDataEditor"] th { padding: 2px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 35px !important; height: 35px !important; align-items: center; }
+        
+        /* Botones táctiles grandes */
         .stButton button { 
             width: 100% !important; height: 3.5rem !important; border-radius: 10px !important; 
             font-weight: 700 !important; background-color: #FF4B4B; color: white; border: none; 
         }
     }
 
+    /* DISEÑO DE TARJETAS */
     .plan-card {
         background-color: #1E1E1E; border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 10px;
     }
@@ -50,14 +57,9 @@ st.markdown("""
     }
     .name-text { font-weight: bold; font-size: 0.95rem; }
     
-    /* ESTILO HISTORIAL DETALLADO */
+    /* GHOST TEXT (Datos Históricos) */
     .ghost-text { 
-        font-size: 0.65rem; 
-        color: #AAA; /* Gris claro legible */
-        font-family: monospace;
-        display: block; 
-        text-align: right; 
-        margin-top: 2px;
+        font-size: 0.65rem; color: #AAA; font-family: monospace; display: block; text-align: right; margin-top: 2px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -71,7 +73,8 @@ def check_login():
             st.markdown("<br><br>", unsafe_allow_html=True)
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center'>🔐 Acceso QiuClub</h3>", unsafe_allow_html=True)
-                u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
+                u = st.text_input("Usuario")
+                p = st.text_input("Contraseña", type="password")
                 if st.button("Ingresar", type="primary", use_container_width=True):
                     if u == "qiuclub" and p == "barra2026":
                         st.session_state.logged_in = True; st.rerun()
@@ -115,67 +118,80 @@ if 'db_staff' not in st.session_state:
 
 # --- 4. FUNCIÓN HISTORIAL INTELIGENTE ---
 def get_last_shift_info(person_name, event_name):
-    """Busca en los logs la última vez que esta persona trabajó en este evento."""
-    # Recorremos los logs de atrás hacia adelante (del más reciente al más antiguo)
+    # Buscar de atrás hacia adelante (último evento primero)
     for log in reversed(st.session_state.db_logs):
         if log['Evento'] == event_name:
-            # Buscamos a la persona en este log
             for bar_name, team in log['Plan'].items():
                 for member in team:
                     if member['Nombre'] == person_name:
-                        # ENCONTRADO! Extraemos datos
-                        
-                        # 1. Fecha corta
-                        try:
-                            d_obj = datetime.strptime(log['Fecha'], '%Y-%m-%d')
-                            d_str = d_obj.strftime('%d/%m')
+                        # Extraer fecha corta
+                        try: d_str = datetime.strptime(log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
                         except: d_str = log['Fecha']
-                        
-                        # 2. Cargo corto
-                        rol_full = member['Rol']
-                        if "Encargado" in rol_full: r_code = "Enc"
-                        elif "Bartender" in rol_full: r_code = "Bar"
-                        elif "Ayudante" in rol_full: r_code = "Ayu"
-                        elif "Apoyo" in rol_full: r_code = "Apy"
-                        else: r_code = rol_full[:3]
-                        
-                        # Retornamos formato: "Barra • Cargo • Fecha"
-                        return f"{bar_name} • {r_code} • {d_str}"
-    return "" # No se encontró historial previo
+                        # Extraer rol corto
+                        rol = member['Rol']
+                        if "Encargado" in rol: rc = "Enc"
+                        elif "Bartender" in rol: rc = "Bar"
+                        elif "Ayudante" in rol: rc = "Ayu"
+                        else: rc = "Apy"
+                        return f"{bar_name} • {rc} • {d_str}"
+    return ""
 
-# --- 5. ALGORITMO ---
+# --- 5. ALGORITMO BLINDADO (NO REPEAT) ---
 def run_allocation(event_name):
     ed = st.session_state.db_eventos[event_name]
-    hist = st.session_state.db_historial.get(event_name, {})
+    # Mapa histórico: {Persona: BarraDondeEstuvo}
+    hist_map = st.session_state.db_historial.get(event_name, {})
+    
     active = set(ed['Staff_Convocado'])
     allo = {}; assigned = set()
     
     for barra in ed['Barras']:
         bn = barra['nombre']; req = barra['requerimientos']; mat = barra['matriz_competencias']
+        # Filtro 1: Solo gente habilitada hoy
+        mat = mat[mat['Nombre'].isin(active)]
+        
         team = []
         
         def pick(role_l, role_i, check_col):
-            cands = mat[(mat[check_col]==True) & (mat['Nombre'].isin(active)) & (~mat['Nombre'].isin(assigned))]
-            valid = []
-            for _, r in cands.iterrows():
-                p = r['Nombre']
-                # BLOQUEO ESTRICTO: Si estuvo en esta barra la vez pasada, NO entra.
-                if clean_str(hist.get(p, "")) == clean_str(bn): continue
-                valid.append(p)
+            # Filtro 2: Que tenga el check Y no esté asignado ya hoy
+            cands = mat[(mat[check_col]==True) & (~mat['Nombre'].isin(assigned))]
             
-            if valid:
-                ch = random.choice(valid); assigned.add(ch)
-                team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': ch, 'IsSupport': False})
+            valid_candidates = []
+            # FILTRO 3 (CRÍTICO): REVISAR HISTORIAL UNO POR UNO
+            for _, r in cands.iterrows():
+                p_name = r['Nombre']
+                last_bar = hist_map.get(p_name, "")
+                
+                # Si la barra anterior es igual a la actual, SE DESCARTA.
+                if clean_str(last_bar) == clean_str(bn):
+                    continue 
+                
+                valid_candidates.append(p_name)
+            
+            if valid_candidates:
+                chosen = random.choice(valid_candidates)
+                assigned.add(chosen)
+                team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': chosen, 'IsSupport': False})
             else:
+                # Si todos los candidatos repiten barra, se deja VACANTE.
                 team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': 'VACANTE', 'IsSupport': False})
 
         for _ in range(req['enc']): pick('Encargado', '👑', 'Es_Encargado')
         for _ in range(req['bar']): pick('Bartender', '🍺', 'Es_Bartender')
         for _ in range(req['ayu']): pick('Ayudante', '🧊', 'Es_Ayudante')
+        
         allo[bn] = team
 
     banca = [p for p in ed['Staff_Convocado'] if p not in assigned]
-    return allo, banca
+    
+    # NUEVO MAPA HISTORIAL (Para guardar al final)
+    new_hist = {}
+    for b_nm, tm in allo.items():
+        for m in tm:
+            if m['Nombre'] != "VACANTE" and not m.get('IsSupport'):
+                new_hist[m['Nombre']] = b_nm
+                
+    return allo, banca, new_hist
 
 # --- 6. EXPORT (PDF/IMG) ---
 def get_pdf_bytes(evento, fecha, plan):
@@ -231,7 +247,6 @@ def get_img_bytes(evento, fecha, plan):
     
     curr_y = 80; col_w = 370
     for i in range(0, len(sb), 2):
-        # Col 1
         def draw_c(x, b, t):
             draw.rectangle([x, curr_y, x+col_w, curr_y+head_h], fill="#DDD", outline="black")
             draw.text((x+5, curr_y+8), b, fill="black", font=font_b)
@@ -252,8 +267,18 @@ def get_img_bytes(evento, fecha, plan):
         
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 7. INTERFAZ ---
-st.title("🍸 Barra Staff V35")
+# --- 7. UTILIDADES ---
+def ordenar_staff(df):
+    df['sort_key'] = df['Cargo_Default'].map({'BARTENDER': 0, 'AYUDANTE': 1})
+    return df.sort_values(by=['sort_key', 'Nombre']).drop('sort_key', axis=1)
+
+def agregar_indice(df):
+    df = df.copy(); df.insert(0, "N°", range(1, len(df) + 1)); return df
+
+def calc_altura(df): return (len(df) * 35) + 38
+
+# --- 8. INTERFAZ ---
+st.title("🍸 Barra Staff V34")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -277,7 +302,8 @@ with t2:
     ne = c1.text_input("Nuevo Evento")
     if c2.button("Crear") and ne:
         if ne not in st.session_state.db_eventos:
-            st.session_state.db_eventos[ne] = {'Staff_Convocado': [], 'Barras': []}; save_data(); st.rerun()
+            st.session_state.db_eventos[ne] = {'Staff_Convocado': [], 'Barras': []}
+            st.session_state.db_historial[ne] = {}; save_data(); st.rerun()
     
     evs = list(st.session_state.db_eventos.keys())
     if not evs: st.stop()
@@ -319,11 +345,11 @@ with t2:
 
 with t3:
     c1, c2 = st.columns(2)
-    od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", eventos, key="oe")
+    od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", list(st.session_state.db_eventos.keys()), key="oe")
     
     if st.button("🚀 GENERAR", type="primary", use_container_width=True):
-        plan, banca = run_allocation(oe)
-        st.session_state.temp_res = {'plan': plan, 'banca': banca, 'ev': oe, 'fecha': od}
+        plan, banca, new_hist = run_allocation(oe)
+        st.session_state.temp_res = {'plan': plan, 'banca': banca, 'ev': oe, 'fecha': od, 'new_hist': new_hist}
     
     if 'temp_res' in st.session_state and st.session_state.temp_res['ev'] == oe:
         res = st.session_state.temp_res
@@ -355,8 +381,6 @@ with t3:
                 st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                 for i, m in enumerate(tm):
                     pn = m['Nombre']
-                    # --- GHOST TEXT LOGIC (V35) ---
-                    # Buscar historial específico de ESTA persona en ESTE evento
                     ghost = get_last_shift_info(pn, oe) if pn != "VACANTE" else ""
                     
                     if em and not m.get('IsSupport'):
@@ -384,12 +408,8 @@ with t3:
         if st.button("💾 CERRAR FECHA", type="primary", use_container_width=True):
             log = {'Fecha': str(res['fecha']), 'Evento': res['ev'], 'Plan': res['plan'], 'Banca': res['banca']}
             st.session_state.db_logs.append(log)
-            # Guardar bloqueo estricto para la próxima
-            nm = {}
-            for b, t in res['plan'].items():
-                for m in t:
-                    if m['Nombre'] != "VACANTE" and not m.get('IsSupport'): nm[m['Nombre']] = b
-            st.session_state.db_historial[res['ev']] = nm
+            # GUARDAR HISTORIAL NUEVO
+            st.session_state.db_historial[res['ev']] = res['new_hist']
             save_data(); st.success("Guardado")
 
 with t4:
