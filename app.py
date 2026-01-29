@@ -6,7 +6,7 @@ import json
 import os
 
 # --- 1. CONFIGURACIÓN E INYECCIÓN DE CSS (ESTILO COMPACTO) ---
-st.set_page_config(page_title="ERP Staff V13 (Compact)", page_icon="📲", layout="wide")
+st.set_page_config(page_title="ERP Staff V14 (Fixed)", page_icon="📲", layout="wide")
 
 st.markdown("""
     <style>
@@ -24,7 +24,7 @@ st.markdown("""
             font-size: 13px !important;
         }
         div[data-testid="stDataEditor"] th {
-            padding: 2px !important; /* Cabecera pegada */
+            padding: 2px !important; 
             font-size: 11px !important;
         }
         div[data-testid="stDataEditor"] td {
@@ -32,10 +32,9 @@ st.markdown("""
             padding-bottom: 0px !important;
             padding-left: 2px !important;
             padding-right: 2px !important;
-            height: 30px !important; /* Fila bajita */
+            height: 30px !important;
         }
         
-        /* Botones grandes */
         .stButton button {
             width: 100% !important;
             height: 3rem !important;
@@ -192,7 +191,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asignacion, banca, new_hist
 
 # --- 4. INTERFAZ GRÁFICA ---
-st.title("🏭 ERP Staff V13")
+st.title("🏭 ERP Staff V14")
 
 tab1, tab2, tab3, tab4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
@@ -200,31 +199,32 @@ tab1, tab2, tab3, tab4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación",
 with tab1:
     with st.expander("➕ Alta / Baja"):
         c1, c2 = st.columns(2)
-        nn = c1.text_input("Nombre")
-        nr = c2.selectbox("Cargo", ["BARTENDER", "AYUDANTE"])
-        if st.button("Guardar"):
+        # KEY UNICA AÑADIDA
+        nn = c1.text_input("Nombre", key="rh_new_name")
+        nr = c2.selectbox("Cargo", ["BARTENDER", "AYUDANTE"], key="rh_new_role")
+        if st.button("Guardar", key="btn_save_rh"):
             if nn:
                 nuevo = pd.DataFrame({'Nombre': [nn], 'Cargo_Default': [nr]})
                 st.session_state['db_staff'] = pd.concat([st.session_state['db_staff'], nuevo], ignore_index=True)
                 guardar_datos()
                 st.rerun()
         df_del = ordenar_staff(st.session_state['db_staff'])
-        list_del = st.multiselect("Eliminar:", df_del['Nombre'].tolist())
-        if st.button("🚨 Eliminar"):
+        list_del = st.multiselect("Eliminar:", df_del['Nombre'].tolist(), key="rh_del_list")
+        if st.button("🚨 Eliminar", key="btn_del_rh"):
             st.session_state['db_staff'] = st.session_state['db_staff'][~st.session_state['db_staff']['Nombre'].isin(list_del)]
             guardar_datos()
             st.rerun()
 
     st.caption("Nómina")
     df_v = ordenar_staff(st.session_state['db_staff'])
-    # Tabla compacta
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=(len(df_v)+1)*35+3)
 
 # TAB 2: CONFIG
 with tab2:
     with st.expander("🆕 Evento"):
-        ne = st.text_input("Nombre")
-        if st.button("Crear"):
+        # KEY UNICA AÑADIDA
+        ne = st.text_input("Nombre", key="config_new_event_name")
+        if st.button("Crear", key="btn_create_event"):
             if ne and ne not in st.session_state['db_eventos']:
                 st.session_state['db_eventos'][ne] = {'Staff_Convocado': [], 'Barras': []}
                 st.session_state['db_historial_algoritmo'][ne] = {}
@@ -233,7 +233,7 @@ with tab2:
 
     lev = list(st.session_state['db_eventos'].keys())
     if not lev: st.stop()
-    ev = st.selectbox("Evento:", lev)
+    ev = st.selectbox("Evento:", lev, key="config_select_event")
     dat = st.session_state['db_eventos'][ev]
     
     # 1. PLANTILLA
@@ -243,18 +243,18 @@ with tab2:
     df_b.insert(0, 'OK', df_b['Nombre'].apply(lambda x: x in conv))
     
     with st.form("f_plantilla"):
-        # CONFIGURACIÓN: Nombre primero
         df_editado = st.data_editor(
             df_b,
             column_config={
                 "OK": st.column_config.CheckboxColumn("✅", width="small"),
                 "Nombre": st.column_config.TextColumn("Nombre", width="medium", disabled=True),
-                "Cargo_Default": None # Ocultar cargo para ahorrar espacio
+                "Cargo_Default": None 
             },
             disabled=["Nombre"],
             use_container_width=True,
-            hide_index=True, # ESENCIAL
-            height=(len(df_b)+1)*35+3
+            hide_index=True,
+            height=(len(df_b)+1)*35+3,
+            key="editor_plantilla" # Key explícita
         )
         if st.form_submit_button("💾 Guardar"):
             lista = df_editado[df_editado['OK']==True]['Nombre'].tolist()
@@ -269,18 +269,17 @@ with tab2:
     if lista_ok:
         with st.expander("➕ Crear Barra"):
             with st.form("f_barra"):
-                nb = st.text_input("Nombre")
+                # KEY UNICA AÑADIDA
+                nb = st.text_input("Nombre", key="new_bar_name")
                 c1, c2, c3 = st.columns(3)
-                ne = c1.number_input("Enc", 0, 5, 1)
-                nba = c2.number_input("Bar", 0, 5, 1)
-                nay = c3.number_input("Ayu", 0, 5, 1)
+                ne = c1.number_input("Enc", 0, 5, 1, key="nb_enc")
+                nba = c2.number_input("Bar", 0, 5, 1, key="nb_bar")
+                nay = c3.number_input("Ayu", 0, 5, 1, key="nb_ayu")
                 
                 df_m = df_b[df_b['Nombre'].isin(lista_ok)].copy().drop('OK', axis=1)
                 df_m['Es_Encargado'] = False
                 df_m['Es_Bartender'] = df_m['Cargo_Default'] == 'BARTENDER'
                 df_m['Es_Ayudante'] = df_m['Cargo_Default'] == 'AYUDANTE'
-                
-                # REORDENAR COLUMNAS EXPLÍCITAMENTE
                 df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                 
                 mo = st.data_editor(
@@ -293,7 +292,8 @@ with tab2:
                     },
                     use_container_width=True,
                     hide_index=True,
-                    height=(len(df_m)+1)*35+3
+                    height=(len(df_m)+1)*35+3,
+                    key="editor_new_bar_matrix"
                 )
                 if st.form_submit_button("Guardar"):
                     if nb:
@@ -305,13 +305,13 @@ with tab2:
         for i, barra in enumerate(dat['Barras']):
             with st.expander(f"✏️ {barra['nombre']}"):
                 with st.form(f"ed_{i}"):
-                    nnb = st.text_input("Nombre", barra['nombre'])
+                    # KEYS UNICAS BASADAS EN INDICE {i}
+                    nnb = st.text_input("Nombre", barra['nombre'], key=f"edit_name_{i}")
                     c1, c2, c3 = st.columns(3)
-                    nne = c1.number_input("E", 0, 5, barra['requerimientos']['enc'])
-                    nnba = c2.number_input("B", 0, 5, barra['requerimientos']['bar'])
-                    nnay = c3.number_input("A", 0, 5, barra['requerimientos']['ayu'])
+                    nne = c1.number_input("E", 0, 5, barra['requerimientos']['enc'], key=f"edit_e_{i}")
+                    nnba = c2.number_input("B", 0, 5, barra['requerimientos']['bar'], key=f"edit_b_{i}")
+                    nnay = c3.number_input("A", 0, 5, barra['requerimientos']['ayu'], key=f"edit_a_{i}")
                     
-                    # REORDENAR AL EDITAR TAMBIÉN
                     df_edit = barra['matriz_competencias'][['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                     
                     me = st.data_editor(
@@ -322,7 +322,8 @@ with tab2:
                             "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"),
                             "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small"),
                         },
-                        use_container_width=True, hide_index=True, height=(len(df_edit)+1)*35+3
+                        use_container_width=True, hide_index=True, height=(len(df_edit)+1)*35+3,
+                        key=f"editor_edit_{i}" # Key unica
                     )
                     if st.form_submit_button("Actualizar"):
                         st.session_state['db_eventos'][ev]['Barras'][i] = {'nombre': nnb, 'requerimientos': {'enc': nne, 'bar': nnba, 'ayu': nnay}, 'matriz_competencias': me}
@@ -336,10 +337,10 @@ with tab2:
 # TAB 3: OPERACIÓN
 with tab3:
     c1, c2 = st.columns(2)
-    fec = c1.date_input("Fecha", date.today())
-    evr = c2.selectbox("Evento Op.", lev)
+    fec = c1.date_input("Fecha", date.today(), key="op_date")
+    evr = c2.selectbox("Evento Op.", lev, key="op_event")
     
-    if st.button("🚀 GENERAR ROTACIÓN", type="primary"):
+    if st.button("🚀 GENERAR ROTACIÓN", type="primary", key="btn_run"):
         if not st.session_state['db_eventos'][evr]['Barras']:
             st.error("Faltan barras.")
         else:
@@ -349,7 +350,7 @@ with tab3:
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
         r = st.session_state['res']
         st.divider()
-        edit_mode = st.toggle("✏️ Editar")
+        edit_mode = st.toggle("✏️ Editar", key="toggle_edit")
         banca_act = sorted(r['banca'])
         cols = st.columns(3)
         idx = 0
@@ -375,7 +376,7 @@ with tab3:
             idx += 1
             
         st.info(f"Banca: {', '.join(r['banca'])}")
-        if st.button("💾 CERRAR FECHA", type="primary"):
+        if st.button("💾 CERRAR FECHA", type="primary", key="btn_close_date"):
             nu = {}
             for b, eq in r['plan'].items():
                 for m in eq:
@@ -397,3 +398,5 @@ with tab4:
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
                     st.divider()
                 st.caption(f"Banca: {', '.join(log['Banca'])}")
+    else:
+        st.write("Sin historial.")
