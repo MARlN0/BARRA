@@ -261,7 +261,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
 
 # --- 7. UI ---
-st.title("🍸 Barra Staff V31")
+st.title("🍸 Barra Staff ")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -457,3 +457,4 @@ with t4:
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
                     st.divider()
     else: st.info("Sin historial.")
+
