@@ -6,47 +6,72 @@ import json
 import os
 import base64
 
-# Intentamos importar FPDF
+# Validación de librería PDF
 try:
     from fpdf import FPDF
 except ImportError:
-    st.error("⚠️ Error: FPDF no instalado. Asegúrate de crear requirements.txt")
+    st.error("⚠️ Error Crítico: FPDF no instalado. Crea el archivo requirements.txt en GitHub.")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff Pro V22", page_icon="🍸", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL (ESTILO FINAL) ---
+st.set_page_config(page_title="Barra Staff Pro V23", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
-    /* OCULTAR ELEMENTOS INNECESARIOS */
+    /* OCULTAR ELEMENTOS QUE MOLESTAN */
     [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
     header { visibility: hidden; }
     .main .block-container { padding-top: 1rem !important; }
 
-    /* OPTIMIZACIÓN MÓVIL */
+    /* OPTIMIZACIÓN CELULAR */
     @media (max-width: 768px) {
-        .block-container { padding-bottom: 5rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
+        .block-container { 
+            padding-bottom: 5rem !important; 
+            padding-left: 0.2rem !important; 
+            padding-right: 0.2rem !important; 
+        }
+        /* TABLAS COMPACTAS Y LEGIBLES */
         div[data-testid="stDataEditor"] table { font-size: 13px !important; }
         div[data-testid="stDataEditor"] th { font-size: 11px !important; padding: 2px !important; text-align: center !important; }
-        div[data-testid="stDataEditor"] td { padding: 0px 1px !important; }
-        div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 35px !important; height: 35px !important; display: flex; align-items: center; }
-        .stButton button { width: 100% !important; height: 3.5rem !important; border-radius: 8px !important; font-weight: bold !important; background-color: #FF4B4B; color: white; border: none; }
+        div[data-testid="stDataEditor"] td { padding: 0px 2px !important; line-height: 1.2 !important; }
+        
+        /* FILAS ALTAS PARA QUE NO HAYA SCROLL INTERNO */
+        div[data-testid="stDataEditor"] div[role="gridcell"] { 
+            min-height: 40px !important; 
+            height: 40px !important; 
+            display: flex; 
+            align-items: center; 
+        }
+        
+        /* BOTONES GRANDES */
+        .stButton button { 
+            width: 100% !important; 
+            height: 3.5rem !important; 
+            border-radius: 8px !important; 
+            font-weight: bold !important; 
+            background-color: #FF4B4B; 
+            color: white; 
+            border: none;
+        }
     }
 
     /* ESTILOS DE TARJETAS */
     .plan-card {
-        border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 10px; padding: 8px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05);
+        border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 12px; 
+        padding: 10px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05);
     }
     .barra-header {
-        font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px;
+        font-size: 1rem; font-weight: 800; text-transform: uppercase; 
+        color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px;
     }
     .fila-rol {
-        display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+        display: flex; justify-content: space-between; align-items: center; 
+        padding: 4px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);
     }
-    .badge { padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background-color: rgba(128, 128, 128, 0.15); }
-    
-    /* ESTILO PARA APOYO (MANUAL) */
-    .apoyo-text { color: #FFA500 !important; font-weight: bold; font-style: italic; }
+    .badge { 
+        padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; 
+        font-weight: bold; background-color: rgba(128, 128, 128, 0.15); 
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -71,7 +96,7 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# --- 3. MOTOR PDF (GRILLA 2 COLUMNAS) ---
+# --- 3. MOTOR PDF INTELIGENTE (ORDENADO POR TAMAÑO) ---
 if FPDF:
     class PDF(FPDF):
         def header(self):
@@ -88,38 +113,35 @@ if FPDF:
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
         
-        # Configuración de Columnas
         col_w = 90; gap = 10; x_left = 10; x_right = 10 + col_w + gap
         
-        # Convertir diccionario a lista de tuplas para iterar
-        items = list(plan.items())
+        # --- ALGORITMO DE ORDENAMIENTO VISUAL ---
+        # Ordenamos las barras por cantidad de personal (Mayor a menor)
+        # Esto hace que "General" y "JW" (grandes) queden juntas arriba.
+        items_ordenados = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
         
-        # Iterar de 2 en 2 (Pares)
-        for i in range(0, len(items), 2):
-            # Verificar salto de pagina
+        for i in range(0, len(items_ordenados), 2):
             if pdf.get_y() > 240: pdf.add_page()
             
             y_start = pdf.get_y()
             max_h = 0
             
-            # --- COLUMNA IZQUIERDA ---
-            bar1, eq1 = items[i]
+            # IZQUIERDA
+            bar1, eq1 = items_ordenados[i]
             pdf.set_xy(x_left, y_start)
             pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
             pdf.cell(col_w, 8, bar1, 1, 1, 'L', fill=True)
             pdf.set_font("Arial", "", 10)
             for m in eq1:
-                # Limpiamos nombre de rol para PDF
                 rol = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
                 pdf.set_x(x_left)
-                pdf.cell(35, 7, rol, 1)
-                pdf.cell(55, 7, m['Nombre'], 1, 1)
+                pdf.cell(35, 7, rol, 1); pdf.cell(55, 7, m['Nombre'], 1, 1)
             h1 = pdf.get_y() - y_start
             if h1 > max_h: max_h = h1
             
-            # --- COLUMNA DERECHA (Si existe) ---
-            if i + 1 < len(items):
-                bar2, eq2 = items[i+1]
+            # DERECHA (Si hay par)
+            if i + 1 < len(items_ordenados):
+                bar2, eq2 = items_ordenados[i+1]
                 pdf.set_xy(x_right, y_start)
                 pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
                 pdf.cell(col_w, 8, bar2, 1, 1, 'L', fill=True)
@@ -127,12 +149,10 @@ if FPDF:
                 for m in eq2:
                     rol = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
                     pdf.set_x(x_right)
-                    pdf.cell(35, 7, rol, 1)
-                    pdf.cell(55, 7, m['Nombre'], 1, 1)
+                    pdf.cell(35, 7, rol, 1); pdf.cell(55, 7, m['Nombre'], 1, 1)
                 h2 = pdf.get_y() - y_start
                 if h2 > max_h: max_h = h2
             
-            # Mover cursor abajo para la siguiente fila
             pdf.set_y(y_start + max_h + 5)
 
         # Banca al final
@@ -188,7 +208,8 @@ def agregar_indice(df):
     df_new = df.copy(); df_new.insert(0, "N°", range(1, len(df_new) + 1)); return df_new
 
 def calc_altura(df):
-    return (len(df) * 35) + 41
+    # Fórmula ajustada para filas de 40px (más espacio para dedos)
+    return (len(df) * 40) + 41
 
 def ejecutar_algoritmo(nombre_evento):
     d = st.session_state['db_eventos'][nombre_evento]
@@ -209,7 +230,7 @@ def ejecutar_algoritmo(nombre_evento):
             
             if val:
                 el = random.choice(val)
-                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el, 'IsSupport': False}) # Added IsSupport Flag
+                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el, 'IsSupport': False})
                 tomados.add(el)
                 if check_memoria: n_h[el] = nb
                 return el
@@ -230,7 +251,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, banca, n_h
 
 # --- 6. APP ---
-st.title("🍸 Barra Staff V1")
+st.title("🍸 Barra Staff V23")
 
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
@@ -242,15 +263,18 @@ with t1:
         
         if st.button("Guardar Personal", key="rh_sv", use_container_width=True):
             if nn:
-                nombre_limpio = nn.strip()
+                # NORMALIZACIÓN Y CONTROL DUPLICADOS
+                nombre_limpio = nn.strip() # Quitar espacios extra
                 nombres_existentes = st.session_state['db_staff']['Nombre'].values
+                
+                # Buscamos si existe (ignorando mayusculas/minusculas si quieres, aquí es exacto)
                 if nombre_limpio in nombres_existentes:
-                    st.error(f"🚫 El nombre '{nombre_limpio}' ya existe.")
+                    st.error(f"🚫 Error: '{nombre_limpio}' ya existe en la lista.")
                 else:
                     nuevo = pd.DataFrame({'Nombre': [nombre_limpio], 'Cargo_Default': [nr]})
                     st.session_state['db_staff'] = pd.concat([st.session_state['db_staff'], nuevo], ignore_index=True)
                     guardar_datos()
-                    st.success(f"✅ {nombre_limpio} agregado.")
+                    st.success(f"✅ {nombre_limpio} agregado exitosamente.")
             else: st.warning("Escribe un nombre.")
 
         st.divider()
@@ -293,6 +317,7 @@ with t2:
     h_p = calc_altura(df_b)
     
     with st.form("fp"):
+        # COLUMNAS ESTÁTICAS PARA QUE NO SE MUEVAN
         df_ed = st.data_editor(
             df_b,
             column_config={
@@ -320,8 +345,10 @@ with t2:
                 
                 df_m = df_b[df_b['Nombre'].isin(lista_ok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
+                
+                # FORZAR ORDEN DE COLUMNAS
                 cols_order = ['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']
-                df_m = df_m[cols_order] 
+                df_m = df_m[cols_order]
                 df_m = agregar_indice(df_m)
                 h_m = calc_altura(df_m)
                 
@@ -385,26 +412,20 @@ with t3:
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
         r = st.session_state['res']; st.divider()
         
-        # --- SECCION APOYO / AFTER (NUEVO) ---
         with st.expander("➕ Agregar Apoyo / After (Manual)", expanded=False):
             c_a1, c_a2 = st.columns(2)
             bar_add = c_a1.selectbox("Barra destino:", list(r['plan'].keys()), key="sel_bar_add")
-            # Listamos todo el staff global, no solo banca
             all_staff = sorted(st.session_state['db_staff']['Nombre'].tolist())
             per_add = c_a2.selectbox("Persona:", all_staff, key="sel_per_add")
             
             if st.button("Agregar a la Barra", type="secondary", use_container_width=True):
-                # Agregar al plan existente
-                st.session_state['res']['plan'][bar_add].append({
-                    'Rol': 'Apoyo', 'Icon': '⚡', 'Nombre': per_add, 'IsSupport': True
-                })
-                st.success(f"{per_add} agregado a {bar_add}")
-                st.rerun()
+                st.session_state['res']['plan'][bar_add].append({'Rol': 'Apoyo', 'Icon': '⚡', 'Nombre': per_add, 'IsSupport': True})
+                st.success(f"{per_add} agregado a {bar_add}"); st.rerun()
         
         st.divider()
         if FPDF:
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'], r['banca'])
-            st.download_button("📄 Descargar PDF", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
+            st.download_button("📄 Descargar PDF (Ordenado)", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
         
         edit_mode = st.toggle("✏️ Editar Asignación", key="op_tgl")
         banca_act = sorted(r['banca'])
@@ -414,8 +435,7 @@ with t3:
                 st.markdown(f"""<div class="plan-card"><div class="barra-header">{b_nom}</div>""", unsafe_allow_html=True)
                 for i, m in enumerate(eq):
                     rol = m['Rol']; ic = m.get('Icon', ''); nm = m['Nombre']; is_supp = m.get('IsSupport', False)
-                    
-                    if edit_mode and not is_supp: # No editamos apoyos manuales con selectbox, solo los borramos o dejamos
+                    if edit_mode and not is_supp:
                         ops = [nm] + banca_act
                         nnm = st.selectbox(f"{ic} {rol}", ops, index=0, key=f"sl_{b_nom}_{i}", label_visibility="collapsed")
                         if nnm != nm:
@@ -424,23 +444,16 @@ with t3:
                             r['plan'][b_nom][i]['Nombre'] = nnm
                             st.rerun()
                     else:
-                        # Color naranja si es apoyo, rojo si es vacante, normal si no
-                        if nm == "VACANTE": color = "#FF4B4B"
-                        elif is_supp: color = "#FFA500" # Naranja
-                        else: color = "var(--text-color)"
-                        
+                        color = "#FF4B4B" if nm == "VACANTE" else ("#FFA500" if is_supp else "var(--text-color)")
                         st.markdown(f"""<div class="fila-rol"><span class="badge">{ic} {rol}</span><span style="font-weight:bold; color:{color}">{nm}</span></div>""", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             idx += 1
         st.info(f"Banca: {', '.join(r['banca'])}")
-        
         if st.button("💾 CERRAR FECHA Y GUARDAR", key="op_save", use_container_width=True):
             nu = {}
             for b, eq in r['plan'].items():
                 for m in eq:
-                    # Solo guardamos historial si es Encargado y NO es apoyo manual
-                    if "Encargado" in m['Rol'] and m['Nombre'] != "VACANTE" and not m.get('IsSupport', False): 
-                        nu[m['Nombre']] = b
+                    if "Encargado" in m['Rol'] and m['Nombre'] != "VACANTE" and not m.get('IsSupport', False): nu[m['Nombre']] = b
             for n, b in nu.items(): st.session_state['db_historial_algoritmo'][r['ev']][n] = b
             log = {'Fecha': str(r['fecha']), 'Evento': r['ev'], 'Plan': r['plan'], 'Banca': list(r['banca'])}
             st.session_state['db_logs_visuales'].append(log)
@@ -463,4 +476,3 @@ with t4:
                     st.divider()
                 st.caption(f"Banca: {', '.join(log['Banca'])}")
     else: st.info("Sin historial.")
-
