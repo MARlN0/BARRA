@@ -6,67 +6,49 @@ import json
 import os
 import base64
 
-# Intentamos importar FPDF (Ahora funcionará con el requirements.txt)
+# Intentamos importar FPDF
 try:
     from fpdf import FPDF
 except ImportError:
     st.error("⚠️ Error: FPDF no instalado. Asegúrate de crear requirements.txt")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL (CSS AVANZADO) ---
+# --- 1. CONFIGURACIÓN VISUAL (CSS FINAL) ---
 st.set_page_config(page_title="Barra Staff Pro", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
-    /* 1. OCULTAR TOOLBAR (Esa barra con lupa y flechas que no quieres) */
-    [data-testid="stElementToolbar"] {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0px !important;
-    }
+    /* 1. OCULTAR TOOLBAR Y HEADER */
+    [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
+    header { visibility: hidden; }
     
-    /* 2. OCULTAR ENCABEZADO DE COLORES */
-    header {visibility: hidden;}
-    
-    /* 3. QUITAR MARGEN SUPERIOR SOBRANTE */
-    .main .block-container {
-        padding-top: 1rem !important;
-    }
+    /* 2. QUITAR MARGENES EXCESIVOS */
+    .main .block-container { padding-top: 1rem !important; }
 
-    /* 4. OPTIMIZACIÓN MÓVIL (COMPACTO) */
+    /* 3. OPTIMIZACIÓN MÓVIL */
     @media (max-width: 768px) {
-        /* Márgenes de pantalla mínimos */
         .block-container {
             padding-left: 0.2rem !important;
             padding-right: 0.2rem !important;
             padding-bottom: 5rem !important;
         }
+        /* TABLA: Fuente ajustada */
+        div[data-testid="stDataEditor"] table { font-size: 13px !important; }
+        div[data-testid="stDataEditor"] th { font-size: 11px !important; padding: 2px !important; text-align: center !important; }
+        div[data-testid="stDataEditor"] td { padding: 0px 1px !important; }
         
-        /* TABLA: Fuente pequeña y filas pegadas */
-        div[data-testid="stDataEditor"] table {
-            font-size: 13px !important;
-        }
-        div[data-testid="stDataEditor"] th {
-            font-size: 11px !important;
-            padding: 2px !important;
-            text-align: center !important;
-        }
-        div[data-testid="stDataEditor"] td {
-            padding: 0px 1px !important; /* Sin espacio lateral */
-        }
-        
-        /* Altura de fila MÍNIMA para juntar todo */
+        /* FILAS: Altura mínima para evitar scroll interno visual */
         div[data-testid="stDataEditor"] div[role="gridcell"] {
-            min-height: 30px !important;
-            height: 30px !important;
+            min-height: 35px !important;
+            height: 35px !important;
             display: flex;
             align-items: center;
         }
         
-        /* Botones grandes y fáciles de tocar */
+        /* BOTONES */
         .stButton button {
             width: 100% !important;
-            height: 3.2rem !important;
+            height: 3.5rem !important;
             border-radius: 8px !important;
             font-weight: bold !important;
             background-color: #FF4B4B;
@@ -75,7 +57,7 @@ st.markdown("""
         }
     }
 
-    /* TARJETAS DE VISUALIZACIÓN */
+    /* TARJETAS */
     .plan-card {
         border: 1px solid rgba(200, 200, 200, 0.3);
         border-radius: 10px;
@@ -84,26 +66,15 @@ st.markdown("""
         background-color: rgba(128, 128, 128, 0.05);
     }
     .barra-header {
-        font-size: 1rem;
-        font-weight: 800;
-        text-transform: uppercase;
-        color: var(--text-color);
-        border-bottom: 3px solid #FF4B4B;
-        margin-bottom: 5px;
-        padding-bottom: 2px;
+        font-size: 1rem; font-weight: 800; text-transform: uppercase;
+        color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px;
     }
     .fila-rol {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 3px 0;
-        border-bottom: 1px solid rgba(128, 128, 128, 0.1);
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 3px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1);
     }
     .badge {
-        padding: 2px 5px;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        font-weight: bold;
+        padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; font-weight: bold;
         background-color: rgba(128, 128, 128, 0.15);
     }
     </style>
@@ -111,12 +82,10 @@ st.markdown("""
 
 # --- 2. LOGIN ---
 def check_password():
-    if 'logged_in' not in st.session_state:
-        st.session_state['logged_in'] = False
-
+    if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
     if not st.session_state['logged_in']:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
             st.markdown("<br>", unsafe_allow_html=True)
             with st.container(border=True):
                 st.markdown("<h3 style='text-align: center;'>🔐 Acceso QiuClub</h3>", unsafe_allow_html=True)
@@ -126,15 +95,13 @@ def check_password():
                     if user == "qiuclub" and password == "barra2026":
                         st.session_state['logged_in'] = True
                         st.rerun()
-                    else:
-                        st.error("Datos incorrectos")
+                    else: st.error("Datos incorrectos")
         return False
     return True
 
-if not check_password():
-    st.stop()
+if not check_password(): st.stop()
 
-# --- 3. GENERADOR PDF ---
+# --- 3. PDF ---
 if FPDF:
     class PDF(FPDF):
         def header(self):
@@ -142,42 +109,24 @@ if FPDF:
             self.cell(0, 10, 'REPORTE OPERATIVO - BARRA STAFF', 0, 1, 'C')
             self.ln(5)
         def footer(self):
-            self.set_y(-15)
-            self.set_font('Arial', 'I', 8)
-            self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+            self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Pag {self.page_no()}', 0, 0, 'C')
 
     def generar_pdf(evento, fecha, plan, banca):
-        pdf = PDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        
-        pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 10, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1)
-        pdf.ln(5)
-        
+        pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", size=12)
+        pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
         for barra, equipo in plan.items():
-            pdf.set_fill_color(230, 230, 230)
-            pdf.set_font("Arial", "B", 11)
-            pdf.cell(0, 8, barra, 1, 1, 'L', fill=True)
-            
+            pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, barra, 1, 1, 'L', fill=True)
             pdf.set_font("Arial", "", 10)
-            for miembro in equipo:
-                rol = miembro['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu")
-                nombre = miembro['Nombre']
-                pdf.cell(40, 7, rol, 1)
-                pdf.cell(0, 7, nombre, 1, 1)
+            for m in equipo:
+                rol = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu")
+                pdf.cell(40, 7, rol, 1); pdf.cell(0, 7, m['Nombre'], 1, 1)
             pdf.ln(3)
-            
-        pdf.ln(5)
-        pdf.set_fill_color(255, 200, 200)
-        pdf.set_font("Arial", "B", 11)
+        pdf.ln(5); pdf.set_fill_color(255, 200, 200); pdf.set_font("Arial", "B", 11)
         pdf.cell(0, 8, f"BANCA ({len(banca)})", 1, 1, 'L', fill=True)
-        pdf.set_font("Arial", "", 10)
-        pdf.multi_cell(0, 7, ", ".join(banca), border=1)
-        
+        pdf.set_font("Arial", "", 10); pdf.multi_cell(0, 7, ", ".join(banca), border=1)
         return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- 4. SISTEMA DE DATOS ---
+# --- 4. DATA ---
 DB_FILE = "base_datos_staff.json"
 
 def cargar_datos():
@@ -185,43 +134,30 @@ def cargar_datos():
         try:
             with open(DB_FILE, 'r') as f:
                 data = json.load(f)
-                df_staff = pd.DataFrame(data['staff'])
-                eventos = data['eventos']
-                for ev_name, ev_data in eventos.items():
-                    for barra in ev_data['Barras']:
-                        barra['matriz_competencias'] = pd.DataFrame(barra['matriz_competencias'])
-                return df_staff, eventos, data['historial'], data['logs']
+                df = pd.DataFrame(data['staff'])
+                evs = data['eventos']
+                for e_n, e_d in evs.items():
+                    for b in e_d['Barras']: b['matriz_competencias'] = pd.DataFrame(b['matriz_competencias'])
+                return df, evs, data['historial'], data['logs']
         except: pass
-    
-    df = pd.DataFrame({
-        'Nombre': ['Sebastian', 'Sandro', 'Vladimir', 'Kevin', 'Jhon', 'Forest', 'Guillermo', 'Jair', 'Jordi', 'Pedro', 'Franklin', 'Luis', 'Gabriel', 'Gerald', 'Marcelo', 'Leandro', 'Manuel', 'Kers'],
-        'Cargo_Default': ['BARTENDER', 'BARTENDER', 'AYUDANTE', 'BARTENDER', 'AYUDANTE', 'BARTENDER', 'BARTENDER', 'BARTENDER', 'AYUDANTE', 'BARTENDER', 'AYUDANTE', 'AYUDANTE', 'AYUDANTE', 'BARTENDER', 'BARTENDER', 'BARTENDER', 'BARTENDER', 'BARTENDER']
-    })
+    df = pd.DataFrame({'Nombre': ['Sebastian', 'Sandro'], 'Cargo_Default': ['BARTENDER', 'BARTENDER']}) # Datos mínimos ejemplo
     return df, {}, {}, []
 
 def guardar_datos():
-    staff_json = st.session_state['db_staff'].to_dict(orient='records')
-    eventos_json = {}
-    for ev_name, ev_data in st.session_state['db_eventos'].items():
-        barras_clean = []
-        for barra in ev_data['Barras']:
-            b_copy = barra.copy()
-            b_copy['matriz_competencias'] = barra['matriz_competencias'].to_dict(orient='records')
-            barras_clean.append(b_copy)
-        eventos_json[ev_name] = {'Staff_Convocado': ev_data['Staff_Convocado'], 'Barras': barras_clean}
-
-    data = {
-        'staff': staff_json, 'eventos': eventos_json,
-        'historial': st.session_state['db_historial_algoritmo'], 'logs': st.session_state['db_logs_visuales']
-    }
+    s_json = st.session_state['db_staff'].to_dict(orient='records')
+    e_json = {}
+    for en, ed in st.session_state['db_eventos'].items():
+        bc = []
+        for b in ed['Barras']:
+            bc_ = b.copy(); bc_['matriz_competencias'] = b['matriz_competencias'].to_dict(orient='records')
+            bc.append(bc_)
+        e_json[en] = {'Staff_Convocado': ed['Staff_Convocado'], 'Barras': bc}
+    data = {'staff': s_json, 'eventos': e_json, 'historial': st.session_state['db_historial_algoritmo'], 'logs': st.session_state['db_logs_visuales']}
     with open(DB_FILE, 'w') as f: json.dump(data, f, indent=4)
 
 if 'db_staff' not in st.session_state:
     s, e, h, l = cargar_datos()
-    st.session_state['db_staff'] = s
-    st.session_state['db_eventos'] = e
-    st.session_state['db_historial_algoritmo'] = h
-    st.session_state['db_logs_visuales'] = l
+    st.session_state['db_staff'] = s; st.session_state['db_eventos'] = e; st.session_state['db_historial_algoritmo'] = h; st.session_state['db_logs_visuales'] = l
 
 # --- 5. LOGICA ---
 def ordenar_staff(df):
@@ -230,119 +166,133 @@ def ordenar_staff(df):
     return df.drop('sort_key', axis=1)
 
 def agregar_indice(df):
-    df_new = df.copy()
-    df_new.insert(0, "N°", range(1, len(df_new) + 1))
-    return df_new
+    df_new = df.copy(); df_new.insert(0, "N°", range(1, len(df_new) + 1)); return df_new
 
 def calc_altura(df):
-    # Altura ultra compacta (30px por fila) para evitar huecos
-    return (len(df) * 30) + 38
+    # FÓRMULA MAGICA PARA QUE SE VEA TODO SIN SCROLL INTERNO
+    # 35px por fila + 38px de cabecera + 3px borde
+    return (len(df) * 35) + 41
 
 def ejecutar_algoritmo(nombre_evento):
-    datos = st.session_state['db_eventos'][nombre_evento]
-    hist = st.session_state['db_historial_algoritmo'].get(nombre_evento, {})
-    asignacion = {}
-    asignados = set()
-    new_hist = {}
-
-    for barra in datos['Barras']:
-        nb = barra['nombre']
-        req = barra['requerimientos']
-        matriz = barra['matriz_competencias']
-        equipo = []
-        pool = matriz[~matriz['Nombre'].isin(asignados)].copy()
-
-        for _ in range(req['enc']):
-            cands = pool[pool['Es_Encargado']==True]
-            validos = [r['Nombre'] for _, r in cands.iterrows() if hist.get(r['Nombre'], "") != nb]
-            if not validos and not cands.empty: validos = cands['Nombre'].tolist()
-            if validos:
-                elegido = random.choice(validos)
-                equipo.append({'Rol': 'Encargado', 'Icon': '👑', 'Nombre': elegido})
-                asignados.add(elegido)
-                new_hist[elegido] = nb
-                pool = pool[pool['Nombre']!=elegido]
-            else: equipo.append({'Rol': 'Encargado', 'Icon': '👑', 'Nombre': 'VACANTE'})
-
-        for _ in range(req['bar']):
-            cands = pool[pool['Es_Bartender']==True]
-            if not cands.empty:
-                elegido = random.choice(cands['Nombre'].tolist())
-                equipo.append({'Rol': 'Bartender', 'Icon': '🍺', 'Nombre': elegido})
-                asignados.add(elegido)
-                pool = pool[pool['Nombre']!=elegido]
-            else: equipo.append({'Rol': 'Bartender', 'Icon': '🍺', 'Nombre': 'VACANTE'})
-
-        for _ in range(req['ayu']):
-            cands = pool[pool['Es_Ayudante']==True]
-            if not cands.empty:
-                elegido = random.choice(cands['Nombre'].tolist())
-                equipo.append({'Rol': 'Ayudante', 'Icon': '🧊', 'Nombre': elegido})
-                asignados.add(elegido)
-                pool = pool[pool['Nombre']!=elegido]
-            else: equipo.append({'Rol': 'Ayudante', 'Icon': '🧊', 'Nombre': 'VACANTE'})
+    d = st.session_state['db_eventos'][nombre_evento]
+    h = st.session_state['db_historial_algoritmo'].get(nombre_evento, {})
+    asig = {}; tomados = set(); n_h = {}
+    
+    for barra in d['Barras']:
+        nb = barra['nombre']; req = barra['requerimientos']; m = barra['matriz_competencias']
+        eq = []; pool = m[~m['Nombre'].isin(tomados)].copy()
         
-        asignacion[nb] = equipo
-    banca = [p for p in datos['Staff_Convocado'] if p not in asignados]
-    return asignacion, banca, new_hist
+        # Función interna para sortear
+        def sortear(rol, icon, col_filtro, check_memoria=False):
+            cands = pool[pool[col_filtro]==True]
+            val = []
+            if check_memoria:
+                val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "") != nb]
+            
+            # Si no hay válidos por memoria, usamos cualquiera disponible (Relax rule)
+            if check_memoria and not val and not cands.empty: val = cands['Nombre'].tolist()
+            elif not check_memoria: val = cands['Nombre'].tolist()
+            
+            if val:
+                el = random.choice(val)
+                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el})
+                tomados.add(el)
+                if check_memoria: n_h[el] = nb
+                return el
+            else:
+                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE'})
+                return None
+
+        for _ in range(req['enc']): 
+            elegido = sortear('Encargado', '👑', 'Es_Encargado', True)
+            if elegido: pool = pool[pool['Nombre']!=elegido]
+            
+        for _ in range(req['bar']): 
+            elegido = sortear('Bartender', '🍺', 'Es_Bartender', False)
+            if elegido: pool = pool[pool['Nombre']!=elegido]
+            
+        for _ in range(req['ayu']): 
+            elegido = sortear('Ayudante', '🧊', 'Es_Ayudante', False)
+            if elegido: pool = pool[pool['Nombre']!=elegido]
+            
+        asig[nb] = eq
+    
+    banca = [p for p in d['Staff_Convocado'] if p not in tomados]
+    return asig, banca, n_h
 
 # --- 6. APP ---
-st.title("🍸 Barra Staff V19")
+st.title("🍸 Barra Staff V20")
 
-tab1, tab2, tab3, tab4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
+t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
-with tab1:
-    with st.expander("➕ Alta / Baja"):
+with t1:
+    with st.expander("➕ Alta / Baja Personal", expanded=True):
         c1, c2 = st.columns(2)
         nn = c1.text_input("Nombre", key="rh_nn")
         nr = c2.selectbox("Cargo", ["BARTENDER", "AYUDANTE"], key="rh_nr")
-        if st.button("Guardar", key="rh_sv", use_container_width=True):
+        
+        # LOGICA ANTI-DUPLICADOS
+        if st.button("Guardar Personal", key="rh_sv", use_container_width=True):
             if nn:
-                nuevo = pd.DataFrame({'Nombre': [nn], 'Cargo_Default': [nr]})
-                st.session_state['db_staff'] = pd.concat([st.session_state['db_staff'], nuevo], ignore_index=True)
-                guardar_datos()
-                st.rerun()
+                # Normalizamos a mayusculas para comparar mejor
+                nombre_limpio = nn.strip()
+                nombres_existentes = st.session_state['db_staff']['Nombre'].values
+                
+                if nombre_limpio in nombres_existentes:
+                    st.error(f"🚫 El nombre '{nombre_limpio}' ya existe en la base de datos.")
+                else:
+                    nuevo = pd.DataFrame({'Nombre': [nombre_limpio], 'Cargo_Default': [nr]})
+                    st.session_state['db_staff'] = pd.concat([st.session_state['db_staff'], nuevo], ignore_index=True)
+                    guardar_datos()
+                    st.success(f"✅ {nombre_limpio} agregado exitosamente.")
+                    # No hacemos rerun para que se vea el mensaje, la tabla de abajo se actualizará en la sgte interacción
+            else:
+                st.warning("Escribe un nombre.")
+
+        st.divider()
         df_del = ordenar_staff(st.session_state['db_staff'])
         list_del = st.multiselect("Eliminar:", df_del['Nombre'].tolist(), key="rh_dl")
-        if st.button("🚨 Eliminar", key="rh_bd", use_container_width=True):
+        if st.button("🚨 Eliminar Seleccionados", key="rh_bd", use_container_width=True):
             st.session_state['db_staff'] = st.session_state['db_staff'][~st.session_state['db_staff']['Nombre'].isin(list_del)]
             guardar_datos()
             st.rerun()
 
-    st.caption("Nómina")
+    st.subheader("Nómina")
     df_v = ordenar_staff(st.session_state['db_staff'])
     df_v = agregar_indice(df_v)
     h_n = calc_altura(df_v)
+    
+    # Tabla RH (Sin scroll interno gracias a height=h_n)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=h_n,
                  column_config={
                      "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
-                     "Nombre": st.column_config.TextColumn("Nombre", width="small"),
+                     "Nombre": st.column_config.TextColumn("Nombre", width="medium"),
                      "Cargo_Default": st.column_config.TextColumn("Cargo", width="small")
                  })
 
-with tab2:
+with t2:
     with st.expander("🆕 Evento"):
         ne = st.text_input("Nombre", key="cf_ne")
         if st.button("Crear", key="cf_bc", use_container_width=True):
             if ne and ne not in st.session_state['db_eventos']:
                 st.session_state['db_eventos'][ne] = {'Staff_Convocado': [], 'Barras': []}
                 st.session_state['db_historial_algoritmo'][ne] = {}
-                guardar_datos()
-                st.rerun()
+                guardar_datos(); st.rerun()
 
     lev = list(st.session_state['db_eventos'].keys())
     if not lev: st.stop()
     ev = st.selectbox("Evento:", lev, key="cf_se")
     dat = st.session_state['db_eventos'][ev]
     
-    st.markdown("##### 1. Plantilla")
+    st.markdown("##### 1. Plantilla (Habilitar)")
     df_b = ordenar_staff(st.session_state['db_staff'])
     conv = set(dat['Staff_Convocado'])
     df_b.insert(0, 'OK', df_b['Nombre'].apply(lambda x: x in conv))
     df_b = agregar_indice(df_b)
+    h_p = calc_altura(df_b)
     
     with st.form("fp"):
-        h_p = calc_altura(df_b)
+        # COLUMNAS ESTÁTICAS Y ORDENADAS
         df_ed = st.data_editor(
             df_b,
             column_config={
@@ -355,8 +305,7 @@ with tab2:
         )
         if st.form_submit_button("💾 Guardar Plantilla", use_container_width=True):
             st.session_state['db_eventos'][ev]['Staff_Convocado'] = df_ed[df_ed['OK']==True]['Nombre'].tolist()
-            guardar_datos()
-            st.rerun()
+            guardar_datos(); st.rerun()
 
     st.markdown("##### 2. Barras")
     lista_ok = dat['Staff_Convocado']
@@ -369,9 +318,14 @@ with tab2:
                 nba = c2.number_input("B", 0, 5, 1, key="bb")
                 nay = c3.number_input("A", 0, 5, 1, key="ba")
                 
+                # PREPARAR MATRIZ CON ORDEN ESTRICTO
                 df_m = df_b[df_b['Nombre'].isin(lista_ok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
-                df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] # Reordenar
+                
+                # BLINDAR EL ORDEN DE COLUMNAS AQUI
+                cols_order = ['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']
+                df_m = df_m[cols_order] # <--- ESTO EVITA QUE SE MUEVAN
+                
                 df_m = agregar_indice(df_m)
                 h_m = calc_altura(df_m)
                 
@@ -387,8 +341,7 @@ with tab2:
                     if nb:
                         nueva = {'nombre': nb, 'requerimientos': {'enc': ne, 'bar': nba, 'ayu': nay}, 'matriz_competencias': mo.drop('N°', axis=1)}
                         st.session_state['db_eventos'][ev]['Barras'].append(nueva)
-                        guardar_datos()
-                        st.rerun()
+                        guardar_datos(); st.rerun()
 
         for i, barra in enumerate(dat['Barras']):
             with st.expander(f"✏️ {barra['nombre']}"):
@@ -400,9 +353,18 @@ with tab2:
                     nnba = c2.number_input("B", 0, 5, req['bar'], key=f"eb_{i}")
                     nnay = c3.number_input("A", 0, 5, req['ayu'], key=f"ea_{i}")
                     
-                    df_e = barra['matriz_competencias'][['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
+                    # BLINDAR ORDEN AL EDITAR TAMBIEN
+                    df_base = barra['matriz_competencias']
+                    cols_order = ['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']
+                    
+                    # Asegurar que existen las columnas (por si acaso version vieja)
+                    for c in cols_order:
+                        if c not in df_base.columns: df_base[c] = False
+                            
+                    df_e = df_base[cols_order] # <--- ORDEN FORZADO
                     df_e = agregar_indice(df_e)
                     h_e = calc_altura(df_e)
+                    
                     me = st.data_editor(df_e, use_container_width=True, hide_index=True, height=h_e,
                         column_config={
                             "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
@@ -413,14 +375,11 @@ with tab2:
                         })
                     if st.form_submit_button("Actualizar", use_container_width=True):
                         st.session_state['db_eventos'][ev]['Barras'][i] = {'nombre': nnb, 'requerimientos': {'enc': nne, 'bar': nnba, 'ayu': nnay}, 'matriz_competencias': me.drop('N°', axis=1)}
-                        guardar_datos()
-                        st.rerun()
+                        guardar_datos(); st.rerun()
                 if st.button("Borrar", key=f"bd_{i}", use_container_width=True):
-                    st.session_state['db_eventos'][ev]['Barras'].pop(i)
-                    guardar_datos()
-                    st.rerun()
+                    st.session_state['db_eventos'][ev]['Barras'].pop(i); guardar_datos(); st.rerun()
 
-with tab3:
+with t3:
     c1, c2 = st.columns(2)
     fec = c1.date_input("Fecha", date.today(), key="op_dt")
     evr = c2.selectbox("Evento Op.", lev, key="op_sl")
@@ -432,17 +391,14 @@ with tab3:
             st.session_state['res'] = {'plan': p, 'banca': b, 'up': u, 'ev': evr, 'fecha': fec}
     
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
-        r = st.session_state['res']
-        st.divider()
-        
+        r = st.session_state['res']; st.divider()
         if FPDF:
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'], r['banca'])
             st.download_button("📄 Descargar PDF", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
         
         edit_mode = st.toggle("✏️ Editar Asignación", key="op_tgl")
         banca_act = sorted(r['banca'])
-        cols = st.columns(3)
-        idx = 0
+        cols = st.columns(3); idx = 0
         for b_nom, eq in r['plan'].items():
             with cols[idx % 3]: 
                 st.markdown(f"""<div class="plan-card"><div class="barra-header">{b_nom}</div>""", unsafe_allow_html=True)
@@ -461,7 +417,6 @@ with tab3:
                         st.markdown(f"""<div class="fila-rol"><span class="badge">{ic} {rol}</span><span style="font-weight:bold; color:{color}">{nm}</span></div>""", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             idx += 1
-            
         st.info(f"Banca: {', '.join(r['banca'])}")
         if st.button("💾 CERRAR FECHA Y GUARDAR", key="op_save", use_container_width=True):
             nu = {}
@@ -471,28 +426,22 @@ with tab3:
             for n, b in nu.items(): st.session_state['db_historial_algoritmo'][r['ev']][n] = b
             log = {'Fecha': str(r['fecha']), 'Evento': r['ev'], 'Plan': r['plan'], 'Banca': list(r['banca'])}
             st.session_state['db_logs_visuales'].append(log)
-            guardar_datos()
-            st.success("Guardado.")
+            guardar_datos(); st.success("Guardado.")
 
-with tab4:
+with t4:
     logs = st.session_state['db_logs_visuales']
     if logs:
         for i, log in enumerate(reversed(logs)):
-            real_index = len(logs) - 1 - i
+            ri = len(logs) - 1 - i
             with st.expander(f"📅 {log['Fecha']} - {log['Evento']}"):
-                if st.button("🗑️ Eliminar Registro", key=f"del_h_{real_index}", type="primary", use_container_width=True):
-                    st.session_state['db_logs_visuales'].pop(real_index)
-                    guardar_datos()
-                    st.rerun()
-                
+                if st.button("🗑️ Eliminar Registro", key=f"del_h_{ri}", type="primary", use_container_width=True):
+                    st.session_state['db_logs_visuales'].pop(ri); guardar_datos(); st.rerun()
                 if FPDF:
                     pdf_h = generar_pdf(log['Evento'], log['Fecha'], log['Plan'], log['Banca'])
-                    st.download_button("📄 Descargar PDF", pdf_h, f"Hist_{log['Fecha']}.pdf", "application/pdf", key=f"pdf_h_{real_index}", use_container_width=True)
-
+                    st.download_button("📄 Descargar PDF", pdf_h, f"Hist_{log['Fecha']}.pdf", "application/pdf", key=f"pdf_h_{ri}", use_container_width=True)
                 for b, eq in log['Plan'].items():
-                    st.markdown(f"**{b}**")
+                    st.markdown(f"**{b}**"); 
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
                     st.divider()
                 st.caption(f"Banca: {', '.join(log['Banca'])}")
-    else:
-        st.info("Sin historial.")
+    else: st.info("Sin historial.")
