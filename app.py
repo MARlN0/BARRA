@@ -15,8 +15,8 @@ except ImportError:
     st.error("⚠️ Error: FPDF no instalado. Crea requirements.txt en GitHub.")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL (CSS AJUSTADO) ---
-st.set_page_config(page_title="Barra Staff V28", page_icon="🍸", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL ---
+st.set_page_config(page_title="Barra Staff V29", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -32,7 +32,6 @@ st.markdown("""
             padding-right: 0.1rem !important; 
             padding-bottom: 5rem !important; 
         }
-        /* TABLA */
         div[data-testid="stDataEditor"] table { font-size: 11px !important; }
         div[data-testid="stDataEditor"] th { 
             font-size: 10px !important; 
@@ -81,7 +80,7 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# --- 3. PDF (TODO NEGRO) ---
+# --- 3. PDF (SIN BANCA) ---
 if FPDF:
     class PDF(FPDF):
         def header(self):
@@ -89,14 +88,14 @@ if FPDF:
         def footer(self):
             self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Pag {self.page_no()}', 0, 0, 'C')
 
-    def generar_pdf(evento, fecha, plan, banca):
+    def generar_pdf(evento, fecha, plan):
+        # NOTA: Eliminamos el argumento 'banca' del PDF final
         pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
         
         col_w = 90; gap = 10; x_left = 10; x_right = 10 + col_w + gap
         items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True) 
         
-        # COLOR TEXTO NEGRO SIEMPRE
         pdf.set_text_color(0, 0, 0) 
         
         for i in range(0, len(items), 2):
@@ -125,15 +124,14 @@ if FPDF:
                 h2 = pdf.get_y() - y_start; max_h = max(max_h, h2)
             
             pdf.set_y(y_start + max_h + 5)
-
-        if pdf.get_y() > 250: pdf.add_page()
-        pdf.set_x(10); pdf.set_fill_color(255, 200, 200); pdf.set_font("Arial", "B", 11)
-        pdf.cell(0, 8, f"BANCA ({len(banca)})", 1, 1, 'L', fill=True)
-        pdf.set_font("Arial", "", 10); pdf.multi_cell(0, 7, ", ".join(banca), border=1)
+        
+        # YA NO IMPRIMIMOS LA BANCA AL FINAL DEL PDF
         return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- 4. MOTOR IMAGEN (TODO NEGRO) ---
-def generar_imagen(evento, fecha, plan, banca):
+# --- 4. MOTOR IMAGEN (SIN BANCA) ---
+from PIL import Image, ImageDraw, ImageFont
+import io
+def generar_imagen(evento, fecha, plan):
     WIDTH = 800; PADDING = 20; COL_W = (WIDTH-(PADDING*3))//2; ROW_H = 30; HEAD_H = 35
     items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
     cur_y = 100
@@ -141,8 +139,10 @@ def generar_imagen(evento, fecha, plan, banca):
         h1 = HEAD_H + (len(items[i][1])*ROW_H)
         h2 = HEAD_H + (len(items[i+1][1])*ROW_H) if i+1<len(items) else 0
         cur_y += max(h1, h2) + PADDING
-    banca_h = ((len(", ".join(banca))//50)+1)*ROW_H
-    tot_h = cur_y + HEAD_H + banca_h + PADDING
+    
+    # Altura solo hasta las barras, sin banca extra
+    tot_h = cur_y + PADDING
+    
     img = Image.new('RGB', (WIDTH, tot_h), 'white'); draw = ImageDraw.Draw(img)
     try: font_b = ImageFont.truetype("arialbd.ttf", 14); font_r = ImageFont.truetype("arial.ttf", 14); font_t = ImageFont.truetype("arial.ttf", 24)
     except: font_b = font_r = font_t = ImageFont.load_default()
@@ -161,10 +161,7 @@ def generar_imagen(evento, fecha, plan, banca):
             r = m['Rol'].replace("👑","Jefe").replace("🍺","Bar").replace("🧊","Ayu").replace("⚡","Apoyo")
             draw.rectangle([x, cy, x+80, cy+ROW_H], outline="gray"); draw.text((x+5, cy+5), r, fill="black", font=font_r)
             draw.rectangle([x+80, cy, x+COL_W, cy+ROW_H], outline="gray")
-            
-            # COLOR LOGIC: SIEMPRE NEGRO A MENOS QUE SEA VACANTE (ROJO)
             c_nm = "red" if m['Nombre']=="VACANTE" else "black"
-            
             draw.text((x+85, cy+5), m['Nombre'], fill=c_nm, font=font_b)
             cy+=ROW_H
         max_row = max(max_row, cy-cur_y)
@@ -183,10 +180,7 @@ def generar_imagen(evento, fecha, plan, banca):
                 cy+=ROW_H
             max_row = max(max_row, cy-cur_y)
         cur_y += max_row + PADDING
-    draw.rectangle([PADDING, cur_y, WIDTH-PADDING, cur_y+HEAD_H], fill="#FFCCCC", outline="black")
-    draw.text((PADDING+5, cur_y+8), f"BANCA ({len(banca)})", fill="black", font=font_b)
-    draw.rectangle([PADDING, cur_y+HEAD_H, WIDTH-PADDING, cur_y+HEAD_H+banca_h], outline="black")
-    draw.text((PADDING+5, cur_y+HEAD_H+5), ", ".join(banca), fill="black", font=font_r)
+    
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
 # --- 5. DATA ---
@@ -231,7 +225,6 @@ def ejecutar_algoritmo(nombre_evento):
     asig = {}; tomados = set(); n_h = {}
     for barra in d['Barras']:
         nb = barra['nombre']; req = barra['requerimientos']; m = barra['matriz_competencias']
-        # SYNC: Usar solo gente habilitada HOY
         gente_valida = d['Staff_Convocado']
         m = m[m['Nombre'].isin(gente_valida)]
         
@@ -257,7 +250,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
 
 # --- 7. UI ---
-st.title("🍸 Barra Staff ")
+st.title("🍸 Barra Staff V29")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -285,7 +278,6 @@ with t1:
                  column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d")})
 
 with t2:
-    # SECCION CREAR / ELIMINAR EVENTO
     c_e1, c_e2 = st.columns([3, 1])
     with c_e1.expander("🆕 Crear Evento"):
         ne = st.text_input("Nombre", key="cf_ne")
@@ -298,7 +290,6 @@ with t2:
     if not lev: st.stop()
     ev = st.selectbox("Evento:", lev, key="cf_se"); dat = st.session_state['db_eventos'][ev]
     
-    # BOTON ELIMINAR EVENTO
     with st.expander(f"🗑️ Eliminar Evento '{ev}'"):
         st.warning("Esta acción borrará toda la configuración de este evento.")
         if st.button("Confirmar Eliminación", type="primary"):
@@ -313,7 +304,6 @@ with t2:
     
     st.caption(f"👥 Seleccionados: **{len(dat['Staff_Convocado'])}** / {len(df_b)}")
     
-    # AQUI MOSTRAMOS EL ROL (SOLO AQUI)
     df_b = df_b[['OK', 'Nombre', 'Cargo_Default']] 
     df_b = agregar_indice(df_b)
     
@@ -324,7 +314,7 @@ with t2:
                 "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
                 "OK": st.column_config.CheckboxColumn("✅", width="small"),
                 "Nombre": st.column_config.TextColumn("Nombre", width="medium", disabled=True),
-                "Cargo_Default": st.column_config.TextColumn("Rol", width="small", disabled=True) # ROL VISIBLE
+                "Cargo_Default": st.column_config.TextColumn("Rol", width="small", disabled=True) 
             },
             disabled=["N°", "Nombre", "Cargo_Default"], use_container_width=True, hide_index=True, height=calc_altura(df_b)
         )
@@ -341,8 +331,6 @@ with t2:
                 
                 df_m = df_b[df_b['Nombre'].isin(lok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
-                
-                # AQUI OCULTAMOS ROL PARA AHORRAR ESPACIO
                 df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
                 df_m = agregar_indice(df_m)
                 
@@ -367,7 +355,6 @@ with t2:
                     nne = c1.number_input("E", 0, 5, req['enc'], key=f"ee_{i}"); nnba = c2.number_input("B", 0, 5, req['bar'], key=f"eb_{i}"); nnay = c3.number_input("A", 0, 5, req['ayu'], key=f"ea_{i}")
                     
                     df_base = barra['matriz_competencias'].copy()
-                    # SYNC LOGIC
                     df_real = st.session_state['db_staff'][st.session_state['db_staff']['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
                     df_sync = pd.merge(df_real, df_base, on="Nombre", how="left")
                     df_sync['Es_Encargado'] = df_sync['Es_Encargado'].fillna(False)
@@ -375,7 +362,7 @@ with t2:
                     df_sync['Es_Ayudante'] = df_sync['Es_Ayudante'].fillna(df_sync['Cargo_Default']=='AYUDANTE')
                     
                     df_sync = ordenar_staff(df_sync)
-                    df_sync = df_sync[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] # SOLO COLUMNAS NECESARIAS
+                    df_sync = df_sync[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] 
                     df_sync = agregar_indice(df_sync)
                     
                     me = st.data_editor(df_sync, use_container_width=True, hide_index=True, height=calc_altura(df_sync),
@@ -406,6 +393,13 @@ with t3:
     if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
         r = st.session_state['res']; st.divider()
         
+        # --- BANCA AL INICIO (OPERACION) ---
+        if r['banca']:
+            st.warning(f"⚠️ **PERSONAL EN BANCA ({len(r['banca'])}):** {', '.join(r['banca'])}")
+        else:
+            st.success("✅ Todo el personal ha sido asignado.")
+        st.divider()
+
         with st.expander("➕ Apoyo / After (Manual)", expanded=False):
             c_a1, c_a2 = st.columns(2)
             bar_add = c_a1.selectbox("Destino:", list(r['plan'].keys()), key="sba")
@@ -417,9 +411,11 @@ with t3:
         
         c_pdf, c_img = st.columns(2)
         if FPDF:
-            pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'], r['banca'])
+            # PASAMOS SOLO PLAN, NO BANCA
+            pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'])
             c_pdf.download_button("📄 PDF", pdf_data, f"Plan.pdf", "application/pdf", type="primary", use_container_width=True)
-        img_data = generar_imagen(r['ev'], str(r['fecha']), r['plan'], r['banca'])
+        # PASAMOS SOLO PLAN, NO BANCA
+        img_data = generar_imagen(r['ev'], str(r['fecha']), r['plan'])
         c_img.download_button("📷 IMG", img_data, f"Plan.png", "image/png", type="primary", use_container_width=True)
         
         edit_mode = st.toggle("✏️ Editar", key="op_tgl")
@@ -443,7 +439,7 @@ with t3:
                         st.markdown(f"""<div class="fila-rol"><span class="badge">{ic} {rol}</span><span style="font-weight:bold; color:{color}">{nm}</span></div>""", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             idx += 1
-        st.info(f"Banca: {', '.join(r['banca'])}")
+        
         if st.button("💾 CERRAR FECHA", key="op_save", use_container_width=True):
             nu = {}
             for b, eq in r['plan'].items():
@@ -459,18 +455,24 @@ with t4:
         for i, log in enumerate(reversed(logs)):
             ri = len(logs) - 1 - i
             with st.expander(f"📅 {log['Fecha']} - {log['Evento']}"):
+                
+                # --- BANCA AL INICIO (HISTORIAL) ---
+                if log['Banca']:
+                    st.warning(f"⚠️ **BANCA:** {', '.join(log['Banca'])}")
+                else:
+                    st.success("✅ Banca Vacía")
+                
                 c1, c2, c3 = st.columns(3)
                 if c1.button("🗑️", key=f"del_{ri}", type="primary", use_container_width=True):
                     st.session_state['db_logs_visuales'].pop(ri); guardar_datos(); st.rerun()
                 if FPDF:
-                    pdf_h = generar_pdf(log['Evento'], log['Fecha'], log['Plan'], log['Banca'])
+                    pdf_h = generar_pdf(log['Evento'], log['Fecha'], log['Plan'])
                     c2.download_button("📄", pdf_h, f"Hist.pdf", "application/pdf", key=f"pdf_{ri}", use_container_width=True)
-                img_h = generar_imagen(log['Evento'], log['Fecha'], log['Plan'], log['Banca'])
+                img_h = generar_imagen(log['Evento'], log['Fecha'], log['Plan'])
                 c3.download_button("📷", img_h, f"Hist.png", "image/png", key=f"img_{ri}", use_container_width=True)
+                
                 for b, eq in log['Plan'].items():
                     st.markdown(f"**{b}**"); 
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
                     st.divider()
-                st.caption(f"Banca: {', '.join(log['Banca'])}")
     else: st.info("Sin historial.")
-
