@@ -32,20 +32,15 @@ st.markdown("""
             padding-right: 0.2rem !important;
             padding-bottom: 5rem !important;
         }
-        /* TABLA: Fuente ajustada */
         div[data-testid="stDataEditor"] table { font-size: 13px !important; }
         div[data-testid="stDataEditor"] th { font-size: 11px !important; padding: 2px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px 1px !important; }
-        
-        /* FILAS: Altura mínima para evitar scroll interno visual */
         div[data-testid="stDataEditor"] div[role="gridcell"] {
             min-height: 35px !important;
             height: 35px !important;
             display: flex;
             align-items: center;
         }
-        
-        /* BOTONES */
         .stButton button {
             width: 100% !important;
             height: 3.5rem !important;
@@ -101,7 +96,7 @@ def check_password():
 
 if not check_password(): st.stop()
 
-# --- 3. PDF ---
+# --- 3. NUEVO GENERADOR PDF (2 COLUMNAS) ---
 if FPDF:
     class PDF(FPDF):
         def header(self):
@@ -112,18 +107,78 @@ if FPDF:
             self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Pag {self.page_no()}', 0, 0, 'C')
 
     def generar_pdf(evento, fecha, plan, banca):
-        pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", size=12)
-        pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
-        for barra, equipo in plan.items():
-            pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11); pdf.cell(0, 8, barra, 1, 1, 'L', fill=True)
+        pdf = PDF()
+        pdf.add_page()
+        
+        # Titulo
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1)
+        pdf.ln(5)
+        
+        # CONFIGURACIÓN DE GRILLA
+        col_width = 90  # Ancho de cada tarjeta
+        spacing = 10    # Espacio entre columnas
+        start_x_left = 10
+        start_x_right = 10 + col_width + spacing
+        
+        # Posición inicial Y
+        y_cursor = pdf.get_y()
+        max_y_row = 0 # Para saber cual fue la tarjeta más larga de la fila
+        
+        # Iteramos las barras
+        items = list(plan.items())
+        
+        for i, (barra, equipo) in enumerate(items):
+            # Verificar si necesitamos nueva página
+            if y_cursor > 250:
+                pdf.add_page()
+                y_cursor = pdf.get_y() + 5
+            
+            # Determinar columna (0 = Izq, 1 = Der)
+            is_right = (i % 2 != 0)
+            
+            # Definir X e Y inicial para esta tarjeta
+            current_x = start_x_right if is_right else start_x_left
+            # Si es izquierda, actualizamos el Y cursor (comienzo de nueva fila)
+            # Si es derecha, usamos el Y cursor actual (misma fila)
+            
+            pdf.set_xy(current_x, y_cursor)
+            
+            # --- DIBUJAR TARJETA ---
+            pdf.set_font("Arial", "B", 11)
+            pdf.set_fill_color(230, 230, 230)
+            pdf.cell(col_width, 8, barra, 1, 1, 'L', fill=True) # Header Barra
+            
+            pdf.set_x(current_x) # Reset X para el contenido
             pdf.set_font("Arial", "", 10)
-            for m in equipo:
-                rol = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu")
-                pdf.cell(40, 7, rol, 1); pdf.cell(0, 7, m['Nombre'], 1, 1)
-            pdf.ln(3)
-        pdf.ln(5); pdf.set_fill_color(255, 200, 200); pdf.set_font("Arial", "B", 11)
+            
+            for miembro in equipo:
+                rol = miembro['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu")
+                nombre = miembro['Nombre']
+                
+                # Celdas internas
+                pdf.set_x(current_x)
+                pdf.cell(30, 7, rol, 1)
+                pdf.cell(col_width - 30, 7, nombre, 1, 1)
+            
+            # Guardar la altura final de esta tarjeta
+            card_end_y = pdf.get_y()
+            if card_end_y > max_y_row:
+                max_y_row = card_end_y
+            
+            # Si es columna derecha, o es el último elemento, bajamos el cursor para la siguiente fila
+            if is_right or i == len(items) - 1:
+                y_cursor = max_y_row + 5 # Espacio vertical entre filas
+                max_y_row = 0 # Reset para nueva fila
+
+        # Banca al final
+        pdf.set_xy(10, y_cursor + 5)
+        pdf.set_fill_color(255, 200, 200)
+        pdf.set_font("Arial", "B", 11)
         pdf.cell(0, 8, f"BANCA ({len(banca)})", 1, 1, 'L', fill=True)
-        pdf.set_font("Arial", "", 10); pdf.multi_cell(0, 7, ", ".join(banca), border=1)
+        pdf.set_font("Arial", "", 10)
+        pdf.multi_cell(0, 7, ", ".join(banca), border=1)
+        
         return pdf.output(dest='S').encode('latin-1', 'replace')
 
 # --- 4. DATA ---
@@ -140,7 +195,7 @@ def cargar_datos():
                     for b in e_d['Barras']: b['matriz_competencias'] = pd.DataFrame(b['matriz_competencias'])
                 return df, evs, data['historial'], data['logs']
         except: pass
-    df = pd.DataFrame({'Nombre': ['Sebastian', 'Sandro'], 'Cargo_Default': ['BARTENDER', 'BARTENDER']}) # Datos mínimos ejemplo
+    df = pd.DataFrame({'Nombre': ['Sebastian', 'Sandro'], 'Cargo_Default': ['BARTENDER', 'BARTENDER']})
     return df, {}, {}, []
 
 def guardar_datos():
@@ -169,8 +224,6 @@ def agregar_indice(df):
     df_new = df.copy(); df_new.insert(0, "N°", range(1, len(df_new) + 1)); return df_new
 
 def calc_altura(df):
-    # FÓRMULA MAGICA PARA QUE SE VEA TODO SIN SCROLL INTERNO
-    # 35px por fila + 38px de cabecera + 3px borde
     return (len(df) * 35) + 41
 
 def ejecutar_algoritmo(nombre_evento):
@@ -182,14 +235,11 @@ def ejecutar_algoritmo(nombre_evento):
         nb = barra['nombre']; req = barra['requerimientos']; m = barra['matriz_competencias']
         eq = []; pool = m[~m['Nombre'].isin(tomados)].copy()
         
-        # Función interna para sortear
         def sortear(rol, icon, col_filtro, check_memoria=False):
             cands = pool[pool[col_filtro]==True]
             val = []
             if check_memoria:
                 val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "") != nb]
-            
-            # Si no hay válidos por memoria, usamos cualquiera disponible (Relax rule)
             if check_memoria and not val and not cands.empty: val = cands['Nombre'].tolist()
             elif not check_memoria: val = cands['Nombre'].tolist()
             
@@ -204,16 +254,11 @@ def ejecutar_algoritmo(nombre_evento):
                 return None
 
         for _ in range(req['enc']): 
-            elegido = sortear('Encargado', '👑', 'Es_Encargado', True)
-            if elegido: pool = pool[pool['Nombre']!=elegido]
-            
+            if sortear('Encargado', '👑', 'Es_Encargado', True): pool = m[~m['Nombre'].isin(tomados)].copy()
         for _ in range(req['bar']): 
-            elegido = sortear('Bartender', '🍺', 'Es_Bartender', False)
-            if elegido: pool = pool[pool['Nombre']!=elegido]
-            
+            if sortear('Bartender', '🍺', 'Es_Bartender', False): pool = m[~m['Nombre'].isin(tomados)].copy()
         for _ in range(req['ayu']): 
-            elegido = sortear('Ayudante', '🧊', 'Es_Ayudante', False)
-            if elegido: pool = pool[pool['Nombre']!=elegido]
+            if sortear('Ayudante', '🧊', 'Es_Ayudante', False): pool = m[~m['Nombre'].isin(tomados)].copy()
             
         asig[nb] = eq
     
@@ -231,38 +276,30 @@ with t1:
         nn = c1.text_input("Nombre", key="rh_nn")
         nr = c2.selectbox("Cargo", ["BARTENDER", "AYUDANTE"], key="rh_nr")
         
-        # LOGICA ANTI-DUPLICADOS
         if st.button("Guardar Personal", key="rh_sv", use_container_width=True):
             if nn:
-                # Normalizamos a mayusculas para comparar mejor
                 nombre_limpio = nn.strip()
                 nombres_existentes = st.session_state['db_staff']['Nombre'].values
-                
                 if nombre_limpio in nombres_existentes:
-                    st.error(f"🚫 El nombre '{nombre_limpio}' ya existe en la base de datos.")
+                    st.error(f"🚫 El nombre '{nombre_limpio}' ya existe.")
                 else:
                     nuevo = pd.DataFrame({'Nombre': [nombre_limpio], 'Cargo_Default': [nr]})
                     st.session_state['db_staff'] = pd.concat([st.session_state['db_staff'], nuevo], ignore_index=True)
                     guardar_datos()
-                    st.success(f"✅ {nombre_limpio} agregado exitosamente.")
-                    # No hacemos rerun para que se vea el mensaje, la tabla de abajo se actualizará en la sgte interacción
-            else:
-                st.warning("Escribe un nombre.")
+                    st.success(f"✅ {nombre_limpio} agregado.")
+            else: st.warning("Escribe un nombre.")
 
         st.divider()
         df_del = ordenar_staff(st.session_state['db_staff'])
         list_del = st.multiselect("Eliminar:", df_del['Nombre'].tolist(), key="rh_dl")
         if st.button("🚨 Eliminar Seleccionados", key="rh_bd", use_container_width=True):
             st.session_state['db_staff'] = st.session_state['db_staff'][~st.session_state['db_staff']['Nombre'].isin(list_del)]
-            guardar_datos()
-            st.rerun()
+            guardar_datos(); st.rerun()
 
     st.subheader("Nómina")
     df_v = ordenar_staff(st.session_state['db_staff'])
     df_v = agregar_indice(df_v)
     h_n = calc_altura(df_v)
-    
-    # Tabla RH (Sin scroll interno gracias a height=h_n)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=h_n,
                  column_config={
                      "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
@@ -292,7 +329,6 @@ with t2:
     h_p = calc_altura(df_b)
     
     with st.form("fp"):
-        # COLUMNAS ESTÁTICAS Y ORDENADAS
         df_ed = st.data_editor(
             df_b,
             column_config={
@@ -318,14 +354,10 @@ with t2:
                 nba = c2.number_input("B", 0, 5, 1, key="bb")
                 nay = c3.number_input("A", 0, 5, 1, key="ba")
                 
-                # PREPARAR MATRIZ CON ORDEN ESTRICTO
                 df_m = df_b[df_b['Nombre'].isin(lista_ok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
-                
-                # BLINDAR EL ORDEN DE COLUMNAS AQUI
                 cols_order = ['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']
-                df_m = df_m[cols_order] # <--- ESTO EVITA QUE SE MUEVAN
-                
+                df_m = df_m[cols_order] 
                 df_m = agregar_indice(df_m)
                 h_m = calc_altura(df_m)
                 
@@ -353,15 +385,11 @@ with t2:
                     nnba = c2.number_input("B", 0, 5, req['bar'], key=f"eb_{i}")
                     nnay = c3.number_input("A", 0, 5, req['ayu'], key=f"ea_{i}")
                     
-                    # BLINDAR ORDEN AL EDITAR TAMBIEN
                     df_base = barra['matriz_competencias']
                     cols_order = ['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']
-                    
-                    # Asegurar que existen las columnas (por si acaso version vieja)
                     for c in cols_order:
                         if c not in df_base.columns: df_base[c] = False
-                            
-                    df_e = df_base[cols_order] # <--- ORDEN FORZADO
+                    df_e = df_base[cols_order]
                     df_e = agregar_indice(df_e)
                     h_e = calc_altura(df_e)
                     
@@ -394,7 +422,7 @@ with t3:
         r = st.session_state['res']; st.divider()
         if FPDF:
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'], r['banca'])
-            st.download_button("📄 Descargar PDF", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
+            st.download_button("📄 Descargar PDF (2 Cols)", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
         
         edit_mode = st.toggle("✏️ Editar Asignación", key="op_tgl")
         banca_act = sorted(r['banca'])
@@ -445,4 +473,3 @@ with t4:
                     st.divider()
                 st.caption(f"Banca: {', '.join(log['Banca'])}")
     else: st.info("Sin historial.")
-
