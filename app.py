@@ -5,435 +5,642 @@ from datetime import datetime, date
 import json
 import os
 import base64
-from PIL import Image, ImageDraw, ImageFont # LIBRERÍA IMAGEN
+from PIL import Image, ImageDraw, ImageFont
 import io
 
-# Validación FPDF
+# --- 0. VALIDACIÓN DE LIBRERÍAS ---
 try:
     from fpdf import FPDF
 except ImportError:
-    st.error("⚠️ Error: FPDF no instalado. Crea requirements.txt en GitHub.")
+    st.error("⚠️ Falta FPDF. Por favor crea el archivo requirements.txt en GitHub con: fpdf")
     FPDF = None
 
-# --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V33", page_icon="🍸", layout="wide")
+# --- 1. CONFIGURACIÓN VISUAL (ESTILO APP NATIVA) ---
+st.set_page_config(page_title="Barra Staff Pro V34", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
-    /* OCULTAR TOOLBAR */
-    [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
+    /* Ocultar elementos de sistema */
+    [data-testid="stElementToolbar"] { display: none !important; }
     header { visibility: hidden; }
     .main .block-container { padding-top: 1rem !important; }
 
-    /* OPTIMIZACIÓN CELULAR */
+    /* ESTILOS MÓVILES */
     @media (max-width: 768px) {
-        .block-container { 
-            padding-left: 0.1rem !important; 
-            padding-right: 0.1rem !important; 
-            padding-bottom: 5rem !important; 
+        .block-container { padding-bottom: 6rem !important; padding-left: 0.2rem; padding-right: 0.2rem; }
+        
+        /* Tablas compactas */
+        div[data-testid="stDataEditor"] table { font-size: 12px !important; }
+        div[data-testid="stDataEditor"] th { padding: 2px !important; text-align: center !important; }
+        div[data-testid="stDataEditor"] td { padding: 0px !important; }
+        
+        /* Altura fila */
+        div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 35px !important; height: 35px !important; align-items: center; }
+        
+        /* Botones táctiles grandes */
+        .stButton button { 
+            width: 100% !important; 
+            height: 3.5rem !important; 
+            border-radius: 10px !important; 
+            font-weight: 700 !important; 
+            background-color: #FF4B4B; 
+            color: white; 
+            border: none; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
-        div[data-testid="stDataEditor"] table { font-size: 11px !important; }
-        div[data-testid="stDataEditor"] th { 
-            font-size: 10px !important; 
-            padding: 1px !important; 
-            text-align: center !important;
-        }
-        div[data-testid="stDataEditor"] td { padding: 0px 0px !important; line-height: 1.0 !important; }
-        div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 30px !important; height: 30px !important; display: flex; align-items: center; }
-        .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; background-color: #FF4B4B; color: white; border: none; }
     }
 
-    /* TARJETAS */
-    .plan-card { border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 12px; padding: 10px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05); }
-    .barra-header { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px; }
-    
-    .fila-rol { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        padding: 4px 0; 
-        border-bottom: 1px solid rgba(128, 128, 128, 0.1); 
+    /* DISEÑO DE TARJETAS DE RESULTADO */
+    .plan-card {
+        background-color: #1E1E1E;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
     }
-    
-    .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background-color: rgba(128, 128, 128, 0.15); }
-    
-    .hist-text { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); font-style: italic; margin-top: -2px; }
+    .barra-title {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #FFF;
+        border-bottom: 2px solid #FF4B4B;
+        padding-bottom: 5px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+    }
+    .row-person {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px solid #333;
+    }
+    .role-badge {
+        background-color: #333;
+        color: #DDD;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: bold;
+    }
+    .name-text { font-weight: bold; font-size: 0.95rem; }
+    .ghost-text { font-size: 0.7rem; color: #888; font-style: italic; display: block; text-align: right; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIN ---
-def check_password():
-    if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
-    if not st.session_state['logged_in']:
+# --- 2. SISTEMA DE LOGIN ---
+def check_login():
+    if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+    if not st.session_state.logged_in:
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<br><br>", unsafe_allow_html=True)
             with st.container(border=True):
-                st.markdown("<h3 style='text-align: center;'>🔐 Acceso QiuClub</h3>", unsafe_allow_html=True)
-                user = st.text_input("Usuario", key="login_user")
-                password = st.text_input("Contraseña", type="password", key="login_pass")
+                st.markdown("<h3 style='text-align:center'>🔐 Acceso QiuClub</h3>", unsafe_allow_html=True)
+                u = st.text_input("Usuario")
+                p = st.text_input("Contraseña", type="password")
                 if st.button("Ingresar", type="primary", use_container_width=True):
-                    if user == "qiuclub" and password == "barra2026":
-                        st.session_state['logged_in'] = True
+                    if u == "qiuclub" and p == "barra2026":
+                        st.session_state.logged_in = True
                         st.rerun()
-                    else: st.error("Incorrecto")
+                    else: st.error("Acceso Denegado")
         return False
     return True
 
-if not check_password(): st.stop()
+if not check_login(): st.stop()
 
-# --- 3. PDF ---
-if FPDF:
-    class PDF(FPDF):
-        def header(self):
-            self.set_font('Arial', 'B', 14); self.cell(0, 10, 'REPORTE OPERATIVO', 0, 1, 'C'); self.ln(5)
-        def footer(self):
-            self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, f'Pag {self.page_no()}', 0, 0, 'C')
-
-    def generar_pdf(evento, fecha, plan):
-        pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
-        col_w = 90; gap = 10; x_left = 10; x_right = 10 + col_w + gap
-        items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True) 
-        pdf.set_text_color(0, 0, 0) 
-        for i in range(0, len(items), 2):
-            if pdf.get_y() > 240: pdf.add_page()
-            y_start = pdf.get_y(); max_h = 0
-            # IZQ
-            b1, e1 = items[i]; pdf.set_xy(x_left, y_start); pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
-            pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
-            for m in e1:
-                r = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
-                pdf.set_x(x_left); pdf.cell(35, 7, r, 1); pdf.cell(55, 7, m['Nombre'], 1, 1)
-            h1 = pdf.get_y() - y_start; max_h = max(max_h, h1)
-            # DER
-            if i+1 < len(items):
-                b2, e2 = items[i+1]; pdf.set_xy(x_right, y_start); pdf.set_fill_color(230, 230, 230); pdf.set_font("Arial", "B", 11)
-                pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
-                for m in e2:
-                    r = m['Rol'].replace("👑", "Jefe").replace("🍺", "Bar").replace("🧊", "Ayu").replace("⚡", "Apoyo")
-                    pdf.set_x(x_right); pdf.cell(35, 7, r, 1); pdf.cell(55, 7, m['Nombre'], 1, 1)
-                h2 = pdf.get_y() - y_start; max_h = max(max_h, h2)
-            pdf.set_y(y_start + max_h + 5)
-        return pdf.output(dest='S').encode('latin-1', 'replace')
-
-# --- 4. IMAGEN ---
-def get_font(size, is_bold=False):
-    font_candidates = ["DejaVuSans-Bold.ttf" if is_bold else "DejaVuSans.ttf", "LiberationSans-Bold.ttf" if is_bold else "LiberationSans-Regular.ttf", "arialbd.ttf" if is_bold else "arial.ttf", "Verdana.ttf"]
-    for font_name in font_candidates:
-        try: return ImageFont.truetype(font_name, size)
-        except OSError: continue
-    return ImageFont.load_default()
-
-def generar_imagen(evento, fecha, plan):
-    WIDTH = 800; PADDING = 20; COL_W = (WIDTH-(PADDING*3))//2; ROW_H = 30; HEAD_H = 35
-    items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
-    cur_y = 100
-    for i in range(0, len(items), 2):
-        h1 = HEAD_H + (len(items[i][1])*ROW_H)
-        h2 = HEAD_H + (len(items[i+1][1])*ROW_H) if i+1<len(items) else 0
-        cur_y += max(h1, h2) + PADDING
-    tot_h = cur_y + PADDING
-    img = Image.new('RGB', (WIDTH, tot_h), 'white'); draw = ImageDraw.Draw(img)
-    font_t = get_font(24, True); font_b = get_font(14, True); font_r = get_font(14, False)
-    draw.text((PADDING, 20), f"{evento} | {fecha}", fill="black", font=font_t)
-    draw.line((PADDING, 60, WIDTH-PADDING, 60), fill="black", width=2)
-    cur_y = 80
-    for i in range(0, len(items), 2):
-        max_row = 0
-        # Izq
-        b1, e1 = items[i]; x = PADDING
-        draw.rectangle([x, cur_y, x+COL_W, cur_y+HEAD_H], fill="#E0E0E0", outline="black")
-        draw.text((x+5, cur_y+8), b1, fill="black", font=font_b)
-        cy = cur_y+HEAD_H
-        for m in e1:
-            r = m['Rol'].replace("👑","Jefe").replace("🍺","Bar").replace("🧊","Ayu").replace("⚡","Apoyo")
-            draw.rectangle([x, cy, x+80, cy+ROW_H], outline="gray"); draw.text((x+5, cy+5), r, fill="black", font=font_r)
-            draw.rectangle([x+80, cy, x+COL_W, cy+ROW_H], outline="gray")
-            c_nm = "red" if m['Nombre']=="VACANTE" else "black"
-            draw.text((x+85, cy+5), m['Nombre'], fill=c_nm, font=font_b)
-            cy+=ROW_H
-        max_row = max(max_row, cy-cur_y)
-        # Der
-        if i+1 < len(items):
-            b2, e2 = items[i+1]; x = PADDING+COL_W+PADDING
-            draw.rectangle([x, cur_y, x+COL_W, cur_y+HEAD_H], fill="#E0E0E0", outline="black")
-            draw.text((x+5, cur_y+8), b2, fill="black", font=font_b)
-            cy = cur_y+HEAD_H
-            for m in e2:
-                r = m['Rol'].replace("👑","Jefe").replace("🍺","Bar").replace("🧊","Ayu").replace("⚡","Apoyo")
-                draw.rectangle([x, cy, x+80, cy+ROW_H], outline="gray"); draw.text((x+5, cy+5), r, fill="black", font=font_r)
-                draw.rectangle([x+80, cy, x+COL_W, cy+ROW_H], outline="gray")
-                c_nm = "red" if m['Nombre']=="VACANTE" else "black"
-                draw.text((x+85, cy+5), m['Nombre'], fill=c_nm, font=font_b)
-                cy+=ROW_H
-            max_row = max(max_row, cy-cur_y)
-        cur_y += max_row + PADDING
-    b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
-
-# --- 5. DATA & HISTORIAL ---
+# --- 3. GESTIÓN DE DATOS (JSON) ---
 DB_FILE = "base_datos_staff.json"
-def cargar_datos():
+
+def clean_str(s):
+    """Limpia espacios invisibles que causan errores de duplicados"""
+    return str(s).strip() if s else ""
+
+def load_data():
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, 'r') as f:
-                d = json.load(f); df = pd.DataFrame(d['staff']); ev = d['eventos']
-                for e in ev.values():
-                    for b in e['Barras']: b['matriz_competencias'] = pd.DataFrame(b['matriz_competencias'])
-                return df, ev, d['historial'], d['logs']
-        except: pass
-    return pd.DataFrame({'Nombre':['Ejemplo'],'Cargo_Default':['BARTENDER']}), {}, {}, []
+                data = json.load(f)
+                # Reconstruir DataFrames
+                df_staff = pd.DataFrame(data['staff'])
+                eventos = data['eventos']
+                for ev in eventos.values():
+                    for b in ev['Barras']:
+                        b['matriz_competencias'] = pd.DataFrame(b['matriz_competencias'])
+                return df_staff, eventos, data.get('historial', {}), data.get('logs', [])
+        except Exception: pass
+    
+    # Datos por defecto si es la primera vez
+    return pd.DataFrame({'Nombre': ['Ejemplo'], 'Cargo_Default': ['BARTENDER']}), {}, {}, []
 
-def guardar_datos():
-    s = st.session_state['db_staff'].to_dict(orient='records'); ev = {}
-    for k, v in st.session_state['db_eventos'].items():
-        bs = []
+def save_data():
+    # Convertir DataFrames a dicts para JSON
+    staff_list = st.session_state.db_staff.to_dict(orient='records')
+    ev_dict = {}
+    for k, v in st.session_state.db_eventos.items():
+        barras_clean = []
         for b in v['Barras']:
-            bc = b.copy(); bc['matriz_competencias'] = b['matriz_competencias'].to_dict(orient='records'); bs.append(bc)
-        ev[k] = {'Staff_Convocado': v['Staff_Convocado'], 'Barras': bs}
-    with open(DB_FILE, 'w') as f: json.dump({'staff': s, 'eventos': ev, 'historial': st.session_state['db_historial_algoritmo'], 'logs': st.session_state['db_logs_visuales']}, f, indent=4)
+            bc = b.copy()
+            bc['matriz_competencias'] = b['matriz_competencias'].to_dict(orient='records')
+            barras_clean.append(bc)
+        ev_dict[k] = {'Staff_Convocado': v['Staff_Convocado'], 'Barras': barras_clean}
+    
+    payload = {
+        'staff': staff_list,
+        'eventos': ev_dict,
+        'historial': st.session_state.db_historial,
+        'logs': st.session_state.db_logs
+    }
+    with open(DB_FILE, 'w') as f: json.dump(payload, f, indent=4)
 
+# Inicializar Estado
 if 'db_staff' not in st.session_state:
-    s, e, h, l = cargar_datos()
-    st.session_state['db_staff'] = s; st.session_state['db_eventos'] = e; st.session_state['db_historial_algoritmo'] = h; st.session_state['db_logs_visuales'] = l
+    s, e, h, l = load_data()
+    st.session_state.db_staff = s
+    st.session_state.db_eventos = e
+    st.session_state.db_historial = h
+    st.session_state.db_logs = l
 
-def get_prev_data(event_name):
-    relevant_logs = [l for l in st.session_state['db_logs_visuales'] if l['Evento'] == event_name]
-    if not relevant_logs: return None, None
-    last_log = relevant_logs[-1]
-    try: fecha_fmt = datetime.strptime(last_log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
-    except: fecha_fmt = last_log['Fecha']
-    return last_log['Plan'], fecha_fmt
-
-# --- 6. LOGICA ESTRICTA (NO REPEAT) ---
-def ordenar_staff(df):
-    df['sort_key'] = df['Cargo_Default'].map({'BARTENDER': 0, 'AYUDANTE': 1})
-    return df.sort_values(by=['sort_key', 'Nombre']).drop('sort_key', axis=1)
-
-def agregar_indice(df):
-    df = df.copy(); df.insert(0, "N°", range(1, len(df) + 1)); return df
-
-def calc_altura(df): return (len(df) * 35) + 38
-
-def ejecutar_algoritmo(nombre_evento):
-    d = st.session_state['db_eventos'][nombre_evento]
-    h = st.session_state['db_historial_algoritmo'].get(nombre_evento, {})
-    asig = {}; tomados = set(); n_h = {}
-    for barra in d['Barras']:
-        nb = barra['nombre']; req = barra['requerimientos']; m = barra['matriz_competencias']
-        # Sincronizar: solo gente habilitada hoy
-        m = m[m['Nombre'].isin(d['Staff_Convocado'])]
-        eq = []; pool = m[~m['Nombre'].isin(tomados)].copy()
+# --- 4. ALGORITMO DE ASIGNACIÓN (CORE) ---
+def run_allocation(event_name):
+    event_data = st.session_state.db_eventos[event_name]
+    # Historial estricto: {NombrePersona: NombreBarraDondeEstuvo}
+    history_map = st.session_state.db_historial.get(event_name, {})
+    
+    # Personas habilitadas hoy (Plantilla)
+    active_staff = set(event_data['Staff_Convocado'])
+    
+    allocation = {}
+    assigned_people = set()
+    
+    for barra in event_data['Barras']:
+        bar_name = barra['nombre']
+        reqs = barra['requerimientos']
+        matrix = barra['matriz_competencias']
         
-        def sortear(rol, icon, col_filtro):
-            cands = pool[pool[col_filtro]==True]
+        # Filtro 1: Solo gente habilitada en la plantilla de HOY
+        # Filtro 2: Solo gente que no haya sido asignada ya en esta ronda
+        # Filtro 3 (Matrix): Que tenga el check del rol
+        
+        team = []
+        
+        # Sub-función de sorteo estricto
+        def pick_role(role_label, role_icon, col_check):
+            # Candidatos base: Tienen el check Y están habilitados Y no están asignados hoy
+            candidates = matrix[
+                (matrix[col_check] == True) & 
+                (matrix['Nombre'].isin(active_staff)) & 
+                (~matrix['Nombre'].isin(assigned_people))
+            ]
             
-            # FILTRO ESTRICTO: JAMAS REPETIR
-            # Buscamos candidatos que NO hayan estado en 'nb' (nombre barra actual)
-            val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "").strip() != nb.strip()]
+            valid_candidates = []
             
-            # SI NO HAY CANDIDATOS VÁLIDOS (PORQUE TODOS YA TRABAJARON AHÍ)
-            # ENTONCES NO PONEMOS A NADIE. SE QUEDA VACANTE.
-            # NO HAY "RELAX RULE".
+            # FILTRO DE ORO: NO REPETIR BARRA
+            for _, row in candidates.iterrows():
+                person = row['Nombre']
+                last_bar = history_map.get(person, "")
+                
+                # Si la barra pasada es igual a la actual, DESCARTADO.
+                if clean_str(last_bar) == clean_str(bar_name):
+                    continue 
+                
+                valid_candidates.append(person)
             
-            if val:
-                el = random.choice(val); eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el, 'IsSupport': False}); tomados.add(el)
-                n_h[el] = nb # Guardar en memoria temp
+            if valid_candidates:
+                chosen = random.choice(valid_candidates)
+                assigned_people.add(chosen)
+                team.append({'Rol': role_label, 'Icon': role_icon, 'Nombre': chosen, 'IsSupport': False})
                 return True
-            else: 
-                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE', 'IsSupport': False})
+            else:
+                # Nadie cumple los requisitos -> VACANTE
+                team.append({'Rol': role_label, 'Icon': role_icon, 'Nombre': 'VACANTE', 'IsSupport': False})
                 return False
 
-        for _ in range(req['enc']): 
-            if sortear('Encargado', '👑', 'Es_Encargado'): pool = m[~m['Nombre'].isin(tomados)].copy()
-        for _ in range(req['bar']): 
-            if sortear('Bartender', '🍺', 'Es_Bartender'): pool = m[~m['Nombre'].isin(tomados)].copy()
-        for _ in range(req['ayu']): 
-            if sortear('Ayudante', '🧊', 'Es_Ayudante'): pool = m[~m['Nombre'].isin(tomados)].copy()
-        asig[nb] = eq
+        # Ejecutar por jerarquía
+        for _ in range(reqs['enc']): pick_role('Encargado', '👑', 'Es_Encargado')
+        for _ in range(reqs['bar']): pick_role('Bartender', '🍺', 'Es_Bartender')
+        for _ in range(reqs['ayu']): pick_role('Ayudante', '🧊', 'Es_Ayudante')
         
-    return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
+        allocation[bar_name] = team
 
-# --- 7. UI ---
-st.title("🍸 Barra Staff V33")
+    # Calcular Banca
+    banca = [p for p in event_data['Staff_Convocado'] if p not in assigned_people]
+    return allocation, banca
+
+# --- 5. EXPORTACIÓN (PDF & IMAGEN) ---
+def get_pdf_bytes(evento, fecha, plan):
+    if not FPDF: return None
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, f"EVENTO: {evento} | {fecha}", 0, 1, 'L')
+    pdf.ln(5)
+    
+    # Layout Grid
+    col_w = 90
+    x_left = 10
+    x_right = 110
+    
+    # Ordenar barras por tamaño (Estética)
+    sorted_bars = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
+    
+    pdf.set_text_color(0,0,0) # Siempre negro
+    
+    for i in range(0, len(sorted_bars), 2):
+        if pdf.get_y() > 250: pdf.add_page()
+        y_start = pdf.get_y()
+        
+        # Izquierda
+        b1, eq1 = sorted_bars[i]
+        pdf.set_xy(x_left, y_start)
+        pdf.set_fill_color(220, 220, 220)
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True)
+        pdf.set_font("Arial", "", 10)
+        for m in eq1:
+            r_cl = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apoyo")
+            pdf.set_x(x_left)
+            pdf.cell(30, 7, r_cl, 1)
+            pdf.cell(60, 7, m['Nombre'], 1, 1)
+            
+        h1 = pdf.get_y() - y_start
+        
+        # Derecha
+        h2 = 0
+        if i+1 < len(sorted_bars):
+            b2, eq2 = sorted_bars[i+1]
+            pdf.set_xy(x_right, y_start)
+            pdf.set_fill_color(220, 220, 220)
+            pdf.set_font("Arial", "B", 11)
+            pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True)
+            pdf.set_font("Arial", "", 10)
+            for m in eq2:
+                r_cl = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apoyo")
+                pdf.set_x(x_right)
+                pdf.cell(30, 7, r_cl, 1)
+                pdf.cell(60, 7, m['Nombre'], 1, 1)
+            h2 = pdf.get_y() - y_start
+            
+        pdf.set_y(y_start + max(h1, h2) + 5)
+        
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
+def get_img_bytes(evento, fecha, plan):
+    # Config básica
+    W, P = 800, 20
+    # Fuentes seguras
+    try: font_t = ImageFont.truetype("arialbd.ttf", 24)
+    except: font_t = ImageFont.load_default()
+    try: font_b = ImageFont.truetype("arialbd.ttf", 14)
+    except: font_b = ImageFont.load_default()
+    try: font_r = ImageFont.truetype("arial.ttf", 14)
+    except: font_r = ImageFont.load_default()
+    
+    sorted_bars = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
+    
+    # Calcular altura
+    curr_y = 80
+    row_h = 30
+    head_h = 35
+    for i in range(0, len(sorted_bars), 2):
+        h_l = head_h + len(sorted_bars[i][1])*row_h
+        h_r = head_h + len(sorted_bars[i+1][1])*row_h if i+1 < len(sorted_bars) else 0
+        curr_y += max(h_l, h_r) + P
+        
+    img = Image.new('RGB', (W, curr_y), 'white')
+    draw = ImageDraw.Draw(img)
+    
+    # Header
+    draw.text((P, 20), f"{evento} | {fecha}", fill="black", font=font_t)
+    draw.line((P, 60, W-P, 60), fill="black", width=3)
+    
+    # Dibujar
+    curr_y = 80
+    col_w = (W - 3*P) // 2
+    
+    for i in range(0, len(sorted_bars), 2):
+        max_h_row = 0
+        
+        # Func dibuja columna
+        def draw_col(x, bar, team):
+            draw.rectangle([x, curr_y, x+col_w, curr_y+head_h], fill="#DDD", outline="black")
+            draw.text((x+5, curr_y+8), bar, fill="black", font=font_b)
+            cy = curr_y + head_h
+            for m in team:
+                rol = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apoyo")
+                draw.rectangle([x, cy, x+80, cy+row_h], outline="#999")
+                draw.text((x+5, cy+5), rol, fill="black", font=font_r)
+                draw.rectangle([x+80, cy, x+col_w, cy+row_h], outline="#999")
+                # Nombre en negro salvo vacante
+                c = "red" if m['Nombre']=="VACANTE" else "black"
+                draw.text((x+85, cy+5), m['Nombre'], fill=c, font=font_b)
+                cy += row_h
+            return cy - curr_y
+
+        h1 = draw_col(P, sorted_bars[i][0], sorted_bars[i][1])
+        max_h_row = h1
+        
+        if i+1 < len(sorted_bars):
+            h2 = draw_col(P+col_w+P, sorted_bars[i+1][0], sorted_bars[i+1][1])
+            max_h_row = max(h1, h2)
+            
+        curr_y += max_h_row + P
+        
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+# --- 6. INTERFAZ ---
+st.title("🍸 Barra Staff V34")
+
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
+# --- TAB RH ---
 with t1:
-    with st.expander("➕ Alta / Baja Personal", expanded=True):
+    with st.expander("➕ Alta Personal", expanded=True):
         c1, c2 = st.columns(2)
-        nn = c1.text_input("Nombre", key="rh_nn")
-        nr = c2.selectbox("Cargo", ["BARTENDER", "AYUDANTE"], key="rh_nr")
-        if st.button("Guardar Personal", key="rh_sv", use_container_width=True):
+        nn = c1.text_input("Nombre", key="n_rh")
+        nr = c2.selectbox("Rol Principal", ["BARTENDER", "AYUDANTE"], key="r_rh")
+        if st.button("Guardar", use_container_width=True):
             if nn:
-                nom = nn.strip()
-                if nom in st.session_state['db_staff']['Nombre'].values: st.error(f"🚫 '{nom}' ya existe.")
+                clean_n = clean_str(nn)
+                if clean_n in st.session_state.db_staff['Nombre'].values:
+                    st.error("Nombre duplicado")
                 else:
-                    st.session_state['db_staff'] = pd.concat([st.session_state['db_staff'], pd.DataFrame({'Nombre':[nom],'Cargo_Default':[nr]})], ignore_index=True)
-                    guardar_datos(); st.success(f"✅ {nom} agregado.")
-            else: st.warning("Escribe nombre.")
-        st.divider()
-        df_d = ordenar_staff(st.session_state['db_staff'])
-        ld = st.multiselect("Eliminar:", df_d['Nombre'].tolist(), key="rh_dl")
-        if st.button("🚨 Eliminar", key="rh_bd", use_container_width=True):
-            st.session_state['db_staff'] = st.session_state['db_staff'][~st.session_state['db_staff']['Nombre'].isin(ld)]; guardar_datos(); st.rerun()
+                    new_row = pd.DataFrame({'Nombre':[clean_n], 'Cargo_Default':[nr]})
+                    st.session_state.db_staff = pd.concat([st.session_state.db_staff, new_row], ignore_index=True)
+                    save_data()
+                    st.success("Guardado")
+                    st.rerun()
+                    
+    st.markdown("---")
+    # Tabla RH
+    df_rh = st.session_state.db_staff.copy()
+    df_rh.insert(0, "N°", range(1, len(df_rh)+1))
+    
+    # Borrar
+    to_del = st.multiselect("Eliminar:", df_rh['Nombre'].tolist())
+    if st.button("🗑️ Borrar Seleccionados"):
+        st.session_state.db_staff = st.session_state.db_staff[~st.session_state.db_staff['Nombre'].isin(to_del)]
+        save_data()
+        st.rerun()
+        
+    st.dataframe(df_rh, use_container_width=True, hide_index=True)
 
-    st.subheader("Nómina")
-    df_v = agregar_indice(ordenar_staff(st.session_state['db_staff']))
-    st.dataframe(df_v, use_container_width=True, hide_index=True, height=calc_altura(df_v), column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d")})
-
+# --- TAB CONFIG ---
 with t2:
-    c_e1, c_e2 = st.columns([3, 1])
-    with c_e1.expander("🆕 Crear Evento"):
-        ne = st.text_input("Nombre", key="cf_ne")
-        if st.button("Crear", key="cf_bc", use_container_width=True):
-            if ne in st.session_state['db_eventos']: st.error(f"🚫 '{ne}' ya existe.")
-            elif ne:
-                st.session_state['db_eventos'][ne] = {'Staff_Convocado': [], 'Barras': []}
-                st.session_state['db_historial_algoritmo'][ne] = {}; guardar_datos(); st.success(f"✅ '{ne}' creado."); st.rerun()
-
-    lev = list(st.session_state['db_eventos'].keys())
-    if not lev: st.stop()
-    ev = st.selectbox("Evento:", lev, key="cf_se"); dat = st.session_state['db_eventos'][ev]
+    # Crear Evento
+    c1, c2 = st.columns([3, 1])
+    new_ev = c1.text_input("Nuevo Evento", placeholder="Ej: Boda Juan y Maria")
+    if c2.button("Crear Evento", use_container_width=True):
+        if new_ev and new_ev not in st.session_state.db_eventos:
+            st.session_state.db_eventos[new_ev] = {'Staff_Convocado': [], 'Barras': []}
+            save_data()
+            st.rerun()
     
-    with st.expander(f"🗑️ Eliminar Evento '{ev}'"):
-        st.warning("Se borrará toda la configuración.")
-        if st.button("Confirmar Eliminación", type="primary"):
-            del st.session_state['db_eventos'][ev]
-            if ev in st.session_state['db_historial_algoritmo']: del st.session_state['db_historial_algoritmo'][ev]
-            guardar_datos(); st.rerun()
-
-    st.markdown("##### 1. Plantilla")
-    df_b = ordenar_staff(st.session_state['db_staff'])
-    conv = set(dat['Staff_Convocado'])
-    df_b.insert(0, 'OK', df_b['Nombre'].apply(lambda x: x in conv))
-    st.caption(f"👥 Seleccionados: **{len(dat['Staff_Convocado'])}** / {len(df_b)}")
+    # Seleccionar Evento
+    eventos = list(st.session_state.db_eventos.keys())
+    if not eventos: st.stop()
+    curr_ev = st.selectbox("Evento Activo:", eventos)
+    ev_data = st.session_state.db_eventos[curr_ev]
     
-    # AQUI MOSTRAMOS EL ROL (PLANTILLA)
-    df_b = df_b[['OK', 'Nombre', 'Cargo_Default']]; df_b = agregar_indice(df_b)
+    if st.button("🗑️ Eliminar este evento"):
+        del st.session_state.db_eventos[curr_ev]
+        save_data()
+        st.rerun()
+        
+    st.markdown("---")
+    st.write("#### 1. Plantilla (Quiénes trabajan)")
     
-    with st.form("fp"):
-        df_ed = st.data_editor(df_b, column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d"), "OK": st.column_config.CheckboxColumn("✅", width="small"), "Nombre": st.column_config.TextColumn("Nombre", width="medium", disabled=True), "Cargo_Default": st.column_config.TextColumn("Rol", width="small", disabled=True)}, disabled=["N°", "Nombre", "Cargo_Default"], use_container_width=True, hide_index=True, height=calc_altura(df_b))
-        if st.form_submit_button("💾 Guardar Plantilla", use_container_width=True):
-            st.session_state['db_eventos'][ev]['Staff_Convocado'] = df_ed[df_ed['OK']==True]['Nombre'].tolist(); guardar_datos(); st.rerun()
+    # Preparar DF Plantilla
+    df_global = st.session_state.db_staff.copy()
+    df_global['Habilitado'] = df_global['Nombre'].isin(ev_data['Staff_Convocado'])
+    df_global = df_global[['Habilitado', 'Nombre', 'Cargo_Default']] # Orden
+    
+    # Editor Plantilla
+    edited_plantilla = st.data_editor(
+        df_global,
+        column_config={
+            "Habilitado": st.column_config.CheckboxColumn("✅", width="small"),
+            "Nombre": st.column_config.TextColumn("Nombre", width="large", disabled=True),
+            "Cargo_Default": st.column_config.TextColumn("Rol", width="small", disabled=True)
+        },
+        use_container_width=True,
+        hide_index=True,
+        height=(len(df_global)*35)+38
+    )
+    
+    if st.button("💾 Guardar Plantilla"):
+        selected = edited_plantilla[edited_plantilla['Habilitado']==True]['Nombre'].tolist()
+        st.session_state.db_eventos[curr_ev]['Staff_Convocado'] = selected
+        save_data()
+        st.success("Plantilla actualizada")
+        
+    st.markdown("---")
+    st.write("#### 2. Barras")
+    
+    # Crear Barra
+    with st.expander("Añadir Barra"):
+        bn = st.text_input("Nombre Barra")
+        c1, c2, c3 = st.columns(3)
+        ne = c1.number_input("Encargados", 0, 5, 1)
+        nb = c2.number_input("Bartenders", 0, 5, 1)
+        na = c3.number_input("Ayudantes", 0, 5, 1)
+        
+        # Matriz vacía basada en plantilla
+        plantilla_actual = st.session_state.db_eventos[curr_ev]['Staff_Convocado']
+        if not plantilla_actual:
+            st.warning("Primero define la plantilla arriba.")
+        else:
+            df_m = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(plantilla_actual)].copy()
+            df_m['Es_Encargado'] = False
+            df_m['Es_Bartender'] = df_m['Cargo_Default'] == 'BARTENDER'
+            df_m['Es_Ayudante'] = df_m['Cargo_Default'] == 'AYUDANTE'
+            df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] # Sin Rol aqui
+            
+            edited_m = st.data_editor(df_m, use_container_width=True, hide_index=True)
+            
+            if st.button("Guardar Barra"):
+                new_bar = {
+                    'nombre': bn,
+                    'requerimientos': {'enc': ne, 'bar': nb, 'ayu': na},
+                    'matriz_competencias': edited_m.to_dict(orient='records')
+                }
+                st.session_state.db_eventos[curr_ev]['Barras'].append(new_bar)
+                save_data()
+                st.rerun()
 
-    st.markdown("##### 2. Barras")
-    lok = dat['Staff_Convocado']
-    if lok:
-        with st.expander("➕ Crear Barra"):
-            with st.form("fb"):
-                nb = st.text_input("Nombre", key="bn"); c1, c2, c3 = st.columns(3)
-                ne = c1.number_input("E", 0, 5, 1, key="be"); nba = c2.number_input("B", 0, 5, 1, key="bb"); nay = c3.number_input("A", 0, 5, 1, key="ba")
-                df_m = df_b[df_b['Nombre'].isin(lok)].copy().drop(['OK', 'N°'], axis=1)
-                df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
+    # Listar Barras
+    for i, barra in enumerate(ev_data['Barras']):
+        with st.expander(f"✏️ {barra['nombre']}"):
+            if st.button("Borrar Barra", key=f"del_{i}"):
+                st.session_state.db_eventos[curr_ev]['Barras'].pop(i)
+                save_data()
+                st.rerun()
                 
-                # SIN ROL AQUI (AHORRO ESPACIO)
-                df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]; df_m = agregar_indice(df_m)
-                
-                mo = st.data_editor(df_m, use_container_width=True, hide_index=True, height=calc_altura(df_m), column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d"), "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True), "Es_Encargado": st.column_config.CheckboxColumn("👑", width="small"), "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"), "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small")})
-                if st.form_submit_button("Guardar", use_container_width=True):
-                    if nb:
-                        st.session_state['db_eventos'][ev]['Barras'].append({'nombre': nb, 'requerimientos': {'enc': ne, 'bar': nba, 'ayu': nay}, 'matriz_competencias': mo.drop('N°', axis=1)}); guardar_datos(); st.rerun()
+            # Edición simple
+            df_curr = pd.DataFrame(barra['matriz_competencias'])
+            # Sincronizar con plantilla actual (Si agregaste gente nueva a la plantilla, que aparezca aqui)
+            df_plantilla = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(ev_data['Staff_Convocado'])]
+            
+            # Merge inteligente
+            df_merged = pd.merge(df_plantilla[['Nombre', 'Cargo_Default']], df_curr, on='Nombre', how='left')
+            df_merged['Es_Encargado'] = df_merged['Es_Encargado'].fillna(False)
+            df_merged['Es_Bartender'] = df_merged['Es_Bartender'].fillna(df_merged['Cargo_Default']=='BARTENDER')
+            df_merged['Es_Ayudante'] = df_merged['Es_Ayudante'].fillna(df_merged['Cargo_Default']=='AYUDANTE')
+            
+            final_df = df_merged[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
+            
+            edited_bar = st.data_editor(final_df, key=f"ed_{i}", use_container_width=True, hide_index=True)
+            
+            if st.button("Actualizar Matriz", key=f"btn_{i}"):
+                st.session_state.db_eventos[curr_ev]['Barras'][i]['matriz_competencias'] = edited_bar.to_dict(orient='records')
+                save_data()
+                st.success("Guardado")
 
-        for i, barra in enumerate(dat['Barras']):
-            with st.expander(f"✏️ {barra['nombre']}"):
-                with st.form(f"fe_{i}"):
-                    nnb = st.text_input("Nombre", barra['nombre'], key=f"en_{i}"); c1, c2, c3 = st.columns(3); req = barra['requerimientos']
-                    nne = c1.number_input("E", 0, 5, req['enc'], key=f"ee_{i}"); nnba = c2.number_input("B", 0, 5, req['bar'], key=f"eb_{i}"); nnay = c3.number_input("A", 0, 5, req['ayu'], key=f"ea_{i}")
-                    df_base = barra['matriz_competencias'].copy(); df_real = st.session_state['db_staff'][st.session_state['db_staff']['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
-                    df_sync = pd.merge(df_real, df_base, on="Nombre", how="left")
-                    df_sync['Es_Encargado'] = df_sync['Es_Encargado'].fillna(False); df_sync['Es_Bartender'] = df_sync['Es_Bartender'].fillna(df_sync['Cargo_Default']=='BARTENDER'); df_sync['Es_Ayudante'] = df_sync['Es_Ayudante'].fillna(df_sync['Cargo_Default']=='AYUDANTE')
-                    df_sync = ordenar_staff(df_sync)[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]; df_sync = agregar_indice(df_sync)
-                    me = st.data_editor(df_sync, use_container_width=True, hide_index=True, height=calc_altura(df_sync), column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d"), "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True), "Es_Encargado": st.column_config.CheckboxColumn("👑", width="small"), "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"), "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small")})
-                    if st.form_submit_button("Actualizar", use_container_width=True):
-                        st.session_state['db_eventos'][ev]['Barras'][i] = {'nombre': nnb, 'requerimientos': {'enc': nne, 'bar': nnba, 'ayu': nnay}, 'matriz_competencias': me.drop('N°', axis=1)}; guardar_datos(); st.rerun()
-                if st.button("Borrar", key=f"bd_{i}", use_container_width=True):
-                    st.session_state['db_eventos'][ev]['Barras'].pop(i); guardar_datos(); st.rerun()
-
+# --- TAB OPERACIÓN ---
 with t3:
     c1, c2 = st.columns(2)
-    fec = c1.date_input("Fecha", date.today(), key="op_dt")
-    evr = c2.selectbox("Evento Op.", lev, key="op_sl")
+    op_date = c1.date_input("Fecha")
+    op_ev = c2.selectbox("Seleccionar Evento", eventos, key="op_ev")
     
-    if st.button("🚀 GENERAR ROTACIÓN", type="primary", key="op_go", use_container_width=True):
-        if not st.session_state['db_eventos'][evr]['Barras']: st.error("Faltan barras.")
-        else:
-            p, b, u = ejecutar_algoritmo(evr)
-            st.session_state['res'] = {'plan': p, 'banca': b, 'up': u, 'ev': evr, 'fecha': fec}
+    if st.button("🚀 GENERAR / RE-GENERAR", type="primary", use_container_width=True):
+        plan, banca = run_allocation(op_ev)
+        st.session_state.temp_res = {'plan': plan, 'banca': banca, 'ev': op_ev, 'fecha': op_date}
     
-    if 'res' in st.session_state and st.session_state['res']['ev'] == evr:
-        r = st.session_state['res']; st.divider()
-        if r['banca']: st.warning(f"⚠️ **BANCA:** {', '.join(r['banca'])}")
-        else: st.success("✅ Todo asignado")
-        with st.expander("➕ Apoyo (Manual)", expanded=False):
-            c_a1, c_a2 = st.columns(2)
-            bar_add = c_a1.selectbox("Destino:", list(r['plan'].keys()), key="sba")
-            all_s = sorted(st.session_state['db_staff']['Nombre'].tolist())
-            per_add = c_a2.selectbox("Persona:", all_s, key="spa")
-            if st.button("Agregar", use_container_width=True):
-                st.session_state['res']['plan'][bar_add].append({'Rol': 'Apoyo', 'Icon': '⚡', 'Nombre': per_add, 'IsSupport': True}); st.rerun()
+    if 'temp_res' in st.session_state and st.session_state.temp_res['ev'] == op_ev:
+        res = st.session_state.temp_res
+        
+        # Botones Export
         c_pdf, c_img = st.columns(2)
-        if FPDF:
-            pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'])
-            c_pdf.download_button("📄 PDF", pdf_data, f"Plan.pdf", "application/pdf", type="primary", use_container_width=True)
-        img_data = generar_imagen(r['ev'], str(r['fecha']), r['plan'])
-        c_img.download_button("📷 IMG", img_data, f"Plan.png", "image/png", type="primary", use_container_width=True)
+        pdf_b = get_pdf_bytes(res['ev'], str(res['fecha']), res['plan'])
+        if pdf_b: c_pdf.download_button("📄 PDF (Limpio)", pdf_b, "plan.pdf", "application/pdf", use_container_width=True)
         
-        edit_mode = st.toggle("✏️ Editar", key="op_tgl")
-        banca_act = sorted(r['banca'])
-        prev_plan, prev_date = get_prev_data(r['ev'])
+        img_b = get_img_bytes(res['ev'], str(res['fecha']), res['plan'])
+        c_img.download_button("📷 IMG (Limpio)", img_b, "plan.png", "image/png", use_container_width=True)
         
-        cols = st.columns(3); idx = 0
-        for b_nom, eq in r['plan'].items():
-            with cols[idx % 3]: 
-                st.markdown(f"""<div class="plan-card"><div class="barra-header">{b_nom}</div>""", unsafe_allow_html=True)
-                for i, m in enumerate(eq):
-                    rol = m['Rol']; ic = m.get('Icon', ''); nm = m['Nombre']; is_supp = m.get('IsSupport', False)
-                    prev_info = ""
-                    if prev_plan and b_nom in prev_plan and i < len(prev_plan[b_nom]):
-                        p_nm = prev_plan[b_nom][i]['Nombre']
-                        if p_nm != "VACANTE": prev_info = f"(Prev: {p_nm} - {prev_date})"
+        # Banca Alerta
+        if res['banca']:
+            st.warning(f"⚠️ **BANCA ({len(res['banca'])}):** {', '.join(res['banca'])}")
+        else:
+            st.success("✅ Todo el personal asignado.")
+            
+        # Apoyo Manual
+        with st.expander("➕ Agregar Apoyo Manual"):
+            all_staff = sorted(st.session_state.db_staff['Nombre'].unique())
+            col_b, col_p = st.columns(2)
+            dest_bar = col_b.selectbox("A Barra:", list(res['plan'].keys()))
+            pers_add = col_p.selectbox("Persona:", all_staff)
+            if st.button("Agregar"):
+                st.session_state.temp_res['plan'][dest_bar].append(
+                    {'Rol': 'Apoyo', 'Icon': '⚡', 'Nombre': pers_add, 'IsSupport': True}
+                )
+                if pers_add in st.session_state.temp_res['banca']:
+                    st.session_state.temp_res['banca'].remove(pers_add)
+                st.rerun()
+
+        st.divider()
+        
+        # Obtener historial previo para Ghost Text
+        prev_map = st.session_state.db_historial.get(op_ev, {})
+        
+        # Renderizado de Tarjetas
+        edit_mode = st.toggle("✏️ Modo Edición")
+        
+        cols = st.columns(3)
+        idx = 0
+        
+        for bar_name, team in res['plan'].items():
+            with cols[idx % 3]:
+                st.markdown(f"""
+                <div class="plan-card">
+                    <div class="barra-title">{bar_name}</div>
+                """, unsafe_allow_html=True)
+                
+                for i, member in enumerate(team):
+                    # Ghost Logic
+                    p_name = member['Nombre']
+                    prev_bar = prev_map.get(p_name, None)
+                    ghost_str = ""
+                    if prev_bar:
+                        # Solo mostramos si estuvo en ESTA barra antes
+                        if clean_str(prev_bar) == clean_str(bar_name):
+                            ghost_str = f"(Repite: {prev_bar})"
+                        else:
+                            ghost_str = f"(Viene de: {prev_bar})"
                     
-                    if edit_mode and not is_supp:
-                        ops = [nm] + banca_act
-                        nnm = st.selectbox(f"{ic} {rol}", ops, index=0, key=f"sl_{b_nom}_{i}", label_visibility="collapsed")
-                        if nnm != nm:
-                            if nnm != "VACANTE" and nnm in r['banca']: r['banca'].remove(nnm)
-                            if nm != "VACANTE": r['banca'].append(nm)
-                            r['plan'][b_nom][i]['Nombre'] = nnm
+                    if edit_mode and not member.get('IsSupport'):
+                        # Selectbox para cambiar
+                        opts = [p_name] + sorted(res['banca'])
+                        new_p = st.selectbox(f"{member['Icon']} {member['Rol']}", opts, key=f"s_{bar_name}_{i}")
+                        if new_p != p_name:
+                            # Logica intercambio banca
+                            if p_name != "VACANTE": res['banca'].append(p_name)
+                            if new_p != "VACANTE" and new_p in res['banca']: res['banca'].remove(new_p)
+                            member['Nombre'] = new_p
                             st.rerun()
                     else:
-                        color = "#FF4B4B" if nm == "VACANTE" else ("#FFA500" if is_supp else "var(--text-color)")
-                        st.markdown(f"""<div class="fila-rol"><div style="flex:1"><span class="badge">{ic} {rol}</span></div><div style="flex:2; text-align:right;"><div style="font-weight:bold; color:{color};">{nm}</div><div class="hist-text">{prev_info}</div></div></div>""", unsafe_allow_html=True)
+                        # Render lectura
+                        color = "#FF4B4B" if p_name == "VACANTE" else "#FFF"
+                        if member.get('IsSupport'): color = "#FFA500"
+                        
+                        st.markdown(f"""
+                        <div class="row-person">
+                            <div class="role-badge">{member['Icon']} {member['Rol']}</div>
+                            <div style="text-align:right">
+                                <div class="name-text" style="color:{color}">{p_name}</div>
+                                <div class="ghost-text">{ghost_str}</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
                 st.markdown("</div>", unsafe_allow_html=True)
             idx += 1
-        
-        if st.button("💾 CERRAR FECHA", key="op_save", use_container_width=True):
-            nu = {}
-            for b, eq in r['plan'].items():
-                for m in eq:
-                    if "Encargado" in m['Rol'] and m['Nombre'] != "VACANTE" and not m.get('IsSupport', False): nu[m['Nombre']] = b
-            for n, b in nu.items(): st.session_state['db_historial_algoritmo'][r['ev']][n] = b
-            log = {'Fecha': str(r['fecha']), 'Evento': r['ev'], 'Plan': r['plan'], 'Banca': list(r['banca'])}
-            st.session_state['db_logs_visuales'].append(log); guardar_datos(); st.success("Guardado.")
+            
+        if st.button("💾 CERRAR FECHA Y GUARDAR HISTORIAL", type="primary", use_container_width=True):
+            # Guardar en logs visuales
+            log_entry = {
+                'Fecha': str(res['fecha']),
+                'Evento': res['ev'],
+                'Plan': res['plan'],
+                'Banca': res['banca']
+            }
+            st.session_state.db_logs.append(log_entry)
+            
+            # GUARDAR HISTORIAL TECNICO (Sobrescribir mapa para evitar repeticiones futuras)
+            new_history_map = {}
+            for bar, team in res['plan'].items():
+                for m in team:
+                    if m['Nombre'] != "VACANTE" and not m.get('IsSupport'):
+                        new_history_map[m['Nombre']] = bar
+            
+            st.session_state.db_historial[res['ev']] = new_history_map
+            
+            save_data()
+            st.success("¡Guardado y Historial Actualizado!")
 
+# --- TAB HISTORIAL ---
 with t4:
-    logs = st.session_state['db_logs_visuales']
-    if logs:
-        for i, log in enumerate(reversed(logs)):
-            ri = len(logs) - 1 - i
+    if not st.session_state.db_logs:
+        st.info("No hay historial.")
+    else:
+        for i, log in enumerate(reversed(st.session_state.db_logs)):
+            real_idx = len(st.session_state.db_logs) - 1 - i
             with st.expander(f"📅 {log['Fecha']} - {log['Evento']}"):
-                if log['Banca']: st.warning(f"⚠️ **BANCA:** {', '.join(log['Banca'])}")
-                else: st.success("✅ Banca Vacía")
                 c1, c2, c3 = st.columns(3)
-                if c1.button("🗑️", key=f"del_{ri}", type="primary", use_container_width=True):
-                    st.session_state['db_logs_visuales'].pop(ri); guardar_datos(); st.rerun()
-                if FPDF:
-                    pdf_h = generar_pdf(log['Evento'], log['Fecha'], log['Plan'])
-                    c2.download_button("📄", pdf_h, f"Hist.pdf", "application/pdf", key=f"pdf_{ri}", use_container_width=True)
-                img_h = generar_imagen(log['Evento'], log['Fecha'], log['Plan'])
-                c3.download_button("📷", img_h, f"Hist.png", "image/png", key=f"img_{ri}", use_container_width=True)
-                for b, eq in log['Plan'].items():
-                    st.markdown(f"**{b}**"); 
-                    for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
-                    st.divider()
-    else: st.info("Sin historial.")
+                if c1.button("🗑️ Eliminar", key=f"dh_{real_idx}"):
+                    st.session_state.db_logs.pop(real_idx)
+                    save_data()
+                    st.rerun()
+                
+                # Re-imprimir
+                pdf_h = get_pdf_bytes(log['Evento'], log['Fecha'], log['Plan'])
+                if pdf_h: c2.download_button("📄 PDF", pdf_h, "h.pdf", "application/pdf", key=f"ph_{real_idx}")
+                
+                img_h = get_img_bytes(log['Evento'], log['Fecha'], log['Plan'])
+                c3.download_button("📷 IMG", img_h, "h.png", "image/png", key=f"ih_{real_idx}")
+                
+                # Vista rápida
+                for b, t in log['Plan'].items():
+                    st.markdown(f"**{b}**")
+                    for m in t:
+                        st.caption(f"{m['Icon']} {m['Nombre']}")
