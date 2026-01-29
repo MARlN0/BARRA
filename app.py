@@ -5,7 +5,7 @@ from datetime import datetime, date
 import json
 import os
 import base64
-from PIL import Image, ImageDraw, ImageFont # LIBRERÍA IMAGEN
+from PIL import Image, ImageDraw, ImageFont
 import io
 
 # Validación FPDF
@@ -16,55 +16,32 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V31", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V32", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
-    /* OCULTAR TOOLBAR */
     [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
     header { visibility: hidden; }
     .main .block-container { padding-top: 1rem !important; }
 
-    /* OPTIMIZACIÓN CELULAR */
     @media (max-width: 768px) {
         .block-container { 
-            padding-left: 0.1rem !important; 
-            padding-right: 0.1rem !important; 
-            padding-bottom: 5rem !important; 
+            padding-left: 0.1rem !important; padding-right: 0.1rem !important; padding-bottom: 5rem !important; 
         }
         div[data-testid="stDataEditor"] table { font-size: 11px !important; }
-        div[data-testid="stDataEditor"] th { 
-            font-size: 10px !important; 
-            padding: 1px !important; 
-            text-align: center !important;
-        }
+        div[data-testid="stDataEditor"] th { font-size: 10px !important; padding: 1px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px 0px !important; line-height: 1.0 !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 30px !important; height: 30px !important; display: flex; align-items: center; }
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; background-color: #FF4B4B; color: white; border: none; }
     }
 
-    /* TARJETAS */
     .plan-card { border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 12px; padding: 10px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05); }
     .barra-header { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px; }
-    
-    /* FLEXBOX PARA ALINEAR ROL Y NOMBRE+HISTORIAL */
-    .fila-rol { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        padding: 4px 0; 
-        border-bottom: 1px solid rgba(128, 128, 128, 0.1); 
-    }
-    
+    .fila-rol { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1); }
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background-color: rgba(128, 128, 128, 0.15); }
     
-    /* ESTILO "GHOST" PARA EL HISTORIAL */
-    .hist-text {
-        font-size: 0.7rem;
-        color: rgba(255, 255, 255, 0.4); /* Gris transparente */
-        font-style: italic;
-        margin-top: -2px;
-    }
+    /* GHOST TEXT (HISTORIAL) */
+    .hist-text { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); font-style: italic; margin-top: -2px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -100,11 +77,9 @@ if FPDF:
     def generar_pdf(evento, fecha, plan):
         pdf = PDF(); pdf.add_page(); pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"EVENTO: {evento}  |  FECHA: {fecha}", 0, 1); pdf.ln(5)
-        
         col_w = 90; gap = 10; x_left = 10; x_right = 10 + col_w + gap
         items = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True) 
         pdf.set_text_color(0, 0, 0) 
-        
         for i in range(0, len(items), 2):
             if pdf.get_y() > 240: pdf.add_page()
             y_start = pdf.get_y(); max_h = 0
@@ -126,7 +101,7 @@ if FPDF:
             pdf.set_y(y_start + max_h + 5)
         return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- 4. MOTOR IMAGEN (FUENTE FIX) ---
+# --- 4. IMAGEN ---
 def get_font(size, is_bold=False):
     font_candidates = ["DejaVuSans-Bold.ttf" if is_bold else "DejaVuSans.ttf", "LiberationSans-Bold.ttf" if is_bold else "LiberationSans-Regular.ttf", "arialbd.ttf" if is_bold else "arial.ttf", "Verdana.ttf"]
     for font_name in font_candidates:
@@ -145,7 +120,6 @@ def generar_imagen(evento, fecha, plan):
     tot_h = cur_y + PADDING
     img = Image.new('RGB', (WIDTH, tot_h), 'white'); draw = ImageDraw.Draw(img)
     font_t = get_font(24, True); font_b = get_font(14, True); font_r = get_font(14, False)
-    
     draw.text((PADDING, 20), f"{evento} | {fecha}", fill="black", font=font_t)
     draw.line((PADDING, 60, WIDTH-PADDING, 60), fill="black", width=2)
     cur_y = 80
@@ -181,7 +155,7 @@ def generar_imagen(evento, fecha, plan):
         cur_y += max_row + PADDING
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 5. DATA & HISTORIAL ---
+# --- 5. DATA ---
 DB_FILE = "base_datos_staff.json"
 def cargar_datos():
     if os.path.exists(DB_FILE):
@@ -207,24 +181,15 @@ if 'db_staff' not in st.session_state:
     s, e, h, l = cargar_datos()
     st.session_state['db_staff'] = s; st.session_state['db_eventos'] = e; st.session_state['db_historial_algoritmo'] = h; st.session_state['db_logs_visuales'] = l
 
-# FUNCION: OBTENER DATA DEL ULTIMO HISTORIAL
 def get_prev_data(event_name):
-    # Buscamos en los logs, filtrando por evento y tomando el último
     relevant_logs = [l for l in st.session_state['db_logs_visuales'] if l['Evento'] == event_name]
-    if not relevant_logs:
-        return None, None
+    if not relevant_logs: return None, None
     last_log = relevant_logs[-1]
-    
-    # Formatear fecha bonita DD/MM
-    try:
-        fecha_obj = datetime.strptime(last_log['Fecha'], '%Y-%m-%d')
-        fecha_fmt = fecha_obj.strftime('%d/%m')
-    except:
-        fecha_fmt = last_log['Fecha']
-        
+    try: fecha_fmt = datetime.strptime(last_log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
+    except: fecha_fmt = last_log['Fecha']
     return last_log['Plan'], fecha_fmt
 
-# --- 6. LOGICA ---
+# --- 6. LOGICA ESTRICTA (V32) ---
 def ordenar_staff(df):
     df['sort_key'] = df['Cargo_Default'].map({'BARTENDER': 0, 'AYUDANTE': 1})
     return df.sort_values(by=['sort_key', 'Nombre']).drop('sort_key', axis=1)
@@ -240,28 +205,41 @@ def ejecutar_algoritmo(nombre_evento):
     asig = {}; tomados = set(); n_h = {}
     for barra in d['Barras']:
         nb = barra['nombre']; req = barra['requerimientos']; m = barra['matriz_competencias']
-        gente_valida = d['Staff_Convocado']
-        m = m[m['Nombre'].isin(gente_valida)]
+        # Sincronizar: solo gente habilitada hoy
+        m = m[m['Nombre'].isin(d['Staff_Convocado'])]
         eq = []; pool = m[~m['Nombre'].isin(tomados)].copy()
         
-        def sortear(rol, icon, col_filtro, check_memoria=False):
+        # FUNCION SORTEAR V32: MEMORIA ESTRICTA PARA TODOS
+        def sortear(rol, icon, col_filtro):
             cands = pool[pool[col_filtro]==True]
-            val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "") != nb] if check_memoria else cands['Nombre'].tolist()
-            if check_memoria and not val and not cands.empty: val = cands['Nombre'].tolist()
+            
+            # FILTRO ESTRICTO: Si trabajó aquí la última vez, FUERA DE LA LISTA
+            val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "") != nb]
+            
+            # ELIMINADO EL "RELAX RULE" (Ya no rellenamos si está vacío)
+            # Si val está vacío, se queda vacío -> VACANTE
+            
             if val:
                 el = random.choice(val); eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el, 'IsSupport': False}); tomados.add(el)
-                if check_memoria: n_h[el] = nb
+                n_h[el] = nb # Guardamos historial nuevo
                 return True
-            else: eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE', 'IsSupport': False}); return False
+            else: 
+                eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE', 'IsSupport': False})
+                return False
 
-        for _ in range(req['enc']): sortear('Encargado', '👑', 'Es_Encargado', True)
-        for _ in range(req['bar']): sortear('Bartender', '🍺', 'Es_Bartender', False)
-        for _ in range(req['ayu']): sortear('Ayudante', '🧊', 'Es_Ayudante', False)
+        # APLICAMOS MEMORIA A TODOS LOS ROLES
+        for _ in range(req['enc']): 
+            if sortear('Encargado', '👑', 'Es_Encargado'): pool = m[~m['Nombre'].isin(tomados)].copy()
+        for _ in range(req['bar']): 
+            if sortear('Bartender', '🍺', 'Es_Bartender'): pool = m[~m['Nombre'].isin(tomados)].copy()
+        for _ in range(req['ayu']): 
+            if sortear('Ayudante', '🧊', 'Es_Ayudante'): pool = m[~m['Nombre'].isin(tomados)].copy()
         asig[nb] = eq
+        
     return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
 
 # --- 7. UI ---
-st.title("🍸 Barra Staff ")
+st.title("🍸 Barra Staff V32")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -365,7 +343,6 @@ with t3:
         r = st.session_state['res']; st.divider()
         if r['banca']: st.warning(f"⚠️ **BANCA:** {', '.join(r['banca'])}")
         else: st.success("✅ Todo asignado")
-        
         with st.expander("➕ Apoyo (Manual)", expanded=False):
             c_a1, c_a2 = st.columns(2)
             bar_add = c_a1.selectbox("Destino:", list(r['plan'].keys()), key="sba")
@@ -373,7 +350,6 @@ with t3:
             per_add = c_a2.selectbox("Persona:", all_s, key="spa")
             if st.button("Agregar", use_container_width=True):
                 st.session_state['res']['plan'][bar_add].append({'Rol': 'Apoyo', 'Icon': '⚡', 'Nombre': per_add, 'IsSupport': True}); st.rerun()
-        
         c_pdf, c_img = st.columns(2)
         if FPDF:
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'])
@@ -383,8 +359,6 @@ with t3:
         
         edit_mode = st.toggle("✏️ Editar", key="op_tgl")
         banca_act = sorted(r['banca'])
-        
-        # --- CARGAR HISTORIAL PREVIO PARA GHOST TEXT ---
         prev_plan, prev_date = get_prev_data(r['ev'])
         
         cols = st.columns(3); idx = 0
@@ -393,15 +367,10 @@ with t3:
                 st.markdown(f"""<div class="plan-card"><div class="barra-header">{b_nom}</div>""", unsafe_allow_html=True)
                 for i, m in enumerate(eq):
                     rol = m['Rol']; ic = m.get('Icon', ''); nm = m['Nombre']; is_supp = m.get('IsSupport', False)
-                    
-                    # BUSCAR DATO PREVIO
                     prev_info = ""
-                    if prev_plan and b_nom in prev_plan:
-                        # Intentamos buscar por índice en la lista de la barra
-                        if i < len(prev_plan[b_nom]):
-                            p_nm = prev_plan[b_nom][i]['Nombre']
-                            if p_nm != "VACANTE":
-                                prev_info = f"(Prev: {p_nm} - {prev_date})"
+                    if prev_plan and b_nom in prev_plan and i < len(prev_plan[b_nom]):
+                        p_nm = prev_plan[b_nom][i]['Nombre']
+                        if p_nm != "VACANTE": prev_info = f"(Prev: {p_nm} - {prev_date})"
                     
                     if edit_mode and not is_supp:
                         ops = [nm] + banca_act
@@ -413,17 +382,7 @@ with t3:
                             st.rerun()
                     else:
                         color = "#FF4B4B" if nm == "VACANTE" else ("#FFA500" if is_supp else "var(--text-color)")
-                        # RENDERIZADO CON HISTORIAL FANTASMA
-                        html_content = f"""
-                        <div class="fila-rol">
-                            <div style="flex:1"><span class="badge">{ic} {rol}</span></div>
-                            <div style="flex:2; text-align:right;">
-                                <div style="font-weight:bold; color:{color};">{nm}</div>
-                                <div class="hist-text">{prev_info}</div>
-                            </div>
-                        </div>
-                        """
-                        st.markdown(html_content, unsafe_allow_html=True)
+                        st.markdown(f"""<div class="fila-rol"><div style="flex:1"><span class="badge">{ic} {rol}</span></div><div style="flex:2; text-align:right;"><div style="font-weight:bold; color:{color};">{nm}</div><div class="hist-text">{prev_info}</div></div></div>""", unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
             idx += 1
         
@@ -457,4 +416,3 @@ with t4:
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
                     st.divider()
     else: st.info("Sin historial.")
-
