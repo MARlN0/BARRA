@@ -230,7 +230,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, banca, n_h
 
 # --- 6. APP ---
-st.title("🍸 Barra Staff V22")
+st.title("🍸 Barra Staff V1")
 
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
@@ -463,3 +463,4 @@ with t4:
                     st.divider()
                 st.caption(f"Banca: {', '.join(log['Banca'])}")
     else: st.info("Sin historial.")
+
