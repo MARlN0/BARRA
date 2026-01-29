@@ -5,7 +5,7 @@ from datetime import datetime, date
 import json
 import os
 import base64
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont # LIBRERÍA IMAGEN
 import io
 
 # Validación FPDF
@@ -16,31 +16,47 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V32", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V33", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
+    /* OCULTAR TOOLBAR */
     [data-testid="stElementToolbar"] { display: none !important; visibility: hidden !important; }
     header { visibility: hidden; }
     .main .block-container { padding-top: 1rem !important; }
 
+    /* OPTIMIZACIÓN CELULAR */
     @media (max-width: 768px) {
         .block-container { 
-            padding-left: 0.1rem !important; padding-right: 0.1rem !important; padding-bottom: 5rem !important; 
+            padding-left: 0.1rem !important; 
+            padding-right: 0.1rem !important; 
+            padding-bottom: 5rem !important; 
         }
         div[data-testid="stDataEditor"] table { font-size: 11px !important; }
-        div[data-testid="stDataEditor"] th { font-size: 10px !important; padding: 1px !important; text-align: center !important; }
+        div[data-testid="stDataEditor"] th { 
+            font-size: 10px !important; 
+            padding: 1px !important; 
+            text-align: center !important;
+        }
         div[data-testid="stDataEditor"] td { padding: 0px 0px !important; line-height: 1.0 !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 30px !important; height: 30px !important; display: flex; align-items: center; }
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; background-color: #FF4B4B; color: white; border: none; }
     }
 
+    /* TARJETAS */
     .plan-card { border: 1px solid rgba(200, 200, 200, 0.3); border-radius: 12px; padding: 10px; margin-bottom: 8px; background-color: rgba(128, 128, 128, 0.05); }
     .barra-header { font-size: 1rem; font-weight: 800; text-transform: uppercase; color: var(--text-color); border-bottom: 3px solid #FF4B4B; margin-bottom: 5px; }
-    .fila-rol { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.1); }
+    
+    .fila-rol { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        padding: 4px 0; 
+        border-bottom: 1px solid rgba(128, 128, 128, 0.1); 
+    }
+    
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background-color: rgba(128, 128, 128, 0.15); }
     
-    /* GHOST TEXT (HISTORIAL) */
     .hist-text { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); font-style: italic; margin-top: -2px; }
     </style>
 """, unsafe_allow_html=True)
@@ -155,7 +171,7 @@ def generar_imagen(evento, fecha, plan):
         cur_y += max_row + PADDING
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 5. DATA ---
+# --- 5. DATA & HISTORIAL ---
 DB_FILE = "base_datos_staff.json"
 def cargar_datos():
     if os.path.exists(DB_FILE):
@@ -189,7 +205,7 @@ def get_prev_data(event_name):
     except: fecha_fmt = last_log['Fecha']
     return last_log['Plan'], fecha_fmt
 
-# --- 6. LOGICA ESTRICTA (V32) ---
+# --- 6. LOGICA ESTRICTA (NO REPEAT) ---
 def ordenar_staff(df):
     df['sort_key'] = df['Cargo_Default'].map({'BARTENDER': 0, 'AYUDANTE': 1})
     return df.sort_values(by=['sort_key', 'Nombre']).drop('sort_key', axis=1)
@@ -209,25 +225,25 @@ def ejecutar_algoritmo(nombre_evento):
         m = m[m['Nombre'].isin(d['Staff_Convocado'])]
         eq = []; pool = m[~m['Nombre'].isin(tomados)].copy()
         
-        # FUNCION SORTEAR V32: MEMORIA ESTRICTA PARA TODOS
         def sortear(rol, icon, col_filtro):
             cands = pool[pool[col_filtro]==True]
             
-            # FILTRO ESTRICTO: Si trabajó aquí la última vez, FUERA DE LA LISTA
-            val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "") != nb]
+            # FILTRO ESTRICTO: JAMAS REPETIR
+            # Buscamos candidatos que NO hayan estado en 'nb' (nombre barra actual)
+            val = [r['Nombre'] for _, r in cands.iterrows() if h.get(r['Nombre'], "").strip() != nb.strip()]
             
-            # ELIMINADO EL "RELAX RULE" (Ya no rellenamos si está vacío)
-            # Si val está vacío, se queda vacío -> VACANTE
+            # SI NO HAY CANDIDATOS VÁLIDOS (PORQUE TODOS YA TRABAJARON AHÍ)
+            # ENTONCES NO PONEMOS A NADIE. SE QUEDA VACANTE.
+            # NO HAY "RELAX RULE".
             
             if val:
                 el = random.choice(val); eq.append({'Rol': rol, 'Icon': icon, 'Nombre': el, 'IsSupport': False}); tomados.add(el)
-                n_h[el] = nb # Guardamos historial nuevo
+                n_h[el] = nb # Guardar en memoria temp
                 return True
             else: 
                 eq.append({'Rol': rol, 'Icon': icon, 'Nombre': 'VACANTE', 'IsSupport': False})
                 return False
 
-        # APLICAMOS MEMORIA A TODOS LOS ROLES
         for _ in range(req['enc']): 
             if sortear('Encargado', '👑', 'Es_Encargado'): pool = m[~m['Nombre'].isin(tomados)].copy()
         for _ in range(req['bar']): 
@@ -239,7 +255,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asig, [p for p in d['Staff_Convocado'] if p not in tomados], n_h
 
 # --- 7. UI ---
-st.title("🍸 Barra Staff V32")
+st.title("🍸 Barra Staff V33")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -291,6 +307,8 @@ with t2:
     conv = set(dat['Staff_Convocado'])
     df_b.insert(0, 'OK', df_b['Nombre'].apply(lambda x: x in conv))
     st.caption(f"👥 Seleccionados: **{len(dat['Staff_Convocado'])}** / {len(df_b)}")
+    
+    # AQUI MOSTRAMOS EL ROL (PLANTILLA)
     df_b = df_b[['OK', 'Nombre', 'Cargo_Default']]; df_b = agregar_indice(df_b)
     
     with st.form("fp"):
@@ -307,7 +325,10 @@ with t2:
                 ne = c1.number_input("E", 0, 5, 1, key="be"); nba = c2.number_input("B", 0, 5, 1, key="bb"); nay = c3.number_input("A", 0, 5, 1, key="ba")
                 df_m = df_b[df_b['Nombre'].isin(lok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
+                
+                # SIN ROL AQUI (AHORRO ESPACIO)
                 df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]; df_m = agregar_indice(df_m)
+                
                 mo = st.data_editor(df_m, use_container_width=True, hide_index=True, height=calc_altura(df_m), column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d"), "Nombre": st.column_config.TextColumn("Nombre", width="small", disabled=True), "Es_Encargado": st.column_config.CheckboxColumn("👑", width="small"), "Es_Bartender": st.column_config.CheckboxColumn("🍺", width="small"), "Es_Ayudante": st.column_config.CheckboxColumn("🧊", width="small")})
                 if st.form_submit_button("Guardar", use_container_width=True):
                     if nb:
