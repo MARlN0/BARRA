@@ -6,11 +6,11 @@ import json
 import os
 import base64
 
-# Intentamos importar FPDF, si falla (porque no se ha instalado requirements.txt), no rompemos la app inmediatamente
+# Intentamos importar FPDF (Ahora funcionará con el requirements.txt)
 try:
     from fpdf import FPDF
 except ImportError:
-    st.error("⚠️ Falta instalar FPDF. Por favor crea el archivo requirements.txt")
+    st.error("⚠️ Error: FPDF no instalado. Asegúrate de crear requirements.txt")
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL (CSS AVANZADO) ---
@@ -18,77 +18,98 @@ st.set_page_config(page_title="Barra Staff Pro", page_icon="🍸", layout="wide"
 
 st.markdown("""
     <style>
-    /* Ocultar la barra de herramientas de las tablas (Lupa, descargar, etc.) */
+    /* 1. OCULTAR TOOLBAR (Esa barra con lupa y flechas que no quieres) */
     [data-testid="stElementToolbar"] {
-        display: none;
+        display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+    }
+    
+    /* 2. OCULTAR ENCABEZADO DE COLORES */
+    header {visibility: hidden;}
+    
+    /* 3. QUITAR MARGEN SUPERIOR SOBRANTE */
+    .main .block-container {
+        padding-top: 1rem !important;
     }
 
-    /* OPTIMIZACIÓN MÓVIL */
+    /* 4. OPTIMIZACIÓN MÓVIL (COMPACTO) */
     @media (max-width: 768px) {
+        /* Márgenes de pantalla mínimos */
         .block-container {
-            padding-top: 1rem !important;
-            padding-bottom: 5rem !important;
             padding-left: 0.2rem !important;
             padding-right: 0.2rem !important;
+            padding-bottom: 5rem !important;
         }
         
-        /* Ajuste de tablas para que no haya huecos */
+        /* TABLA: Fuente pequeña y filas pegadas */
         div[data-testid="stDataEditor"] table {
             font-size: 13px !important;
         }
         div[data-testid="stDataEditor"] th {
-            font-size: 10px !important;
+            font-size: 11px !important;
             padding: 2px !important;
             text-align: center !important;
         }
         div[data-testid="stDataEditor"] td {
-            padding: 0px 2px !important;
+            padding: 0px 1px !important; /* Sin espacio lateral */
         }
         
-        /* Botones grandes */
+        /* Altura de fila MÍNIMA para juntar todo */
+        div[data-testid="stDataEditor"] div[role="gridcell"] {
+            min-height: 30px !important;
+            height: 30px !important;
+            display: flex;
+            align-items: center;
+        }
+        
+        /* Botones grandes y fáciles de tocar */
         .stButton button {
             width: 100% !important;
-            height: 3.5rem !important;
+            height: 3.2rem !important;
             border-radius: 8px !important;
             font-weight: bold !important;
+            background-color: #FF4B4B;
+            color: white;
+            border: none;
         }
     }
 
-    /* TARJETAS */
+    /* TARJETAS DE VISUALIZACIÓN */
     .plan-card {
         border: 1px solid rgba(200, 200, 200, 0.3);
-        border-radius: 12px;
-        padding: 10px;
-        margin-bottom: 10px;
+        border-radius: 10px;
+        padding: 8px;
+        margin-bottom: 8px;
         background-color: rgba(128, 128, 128, 0.05);
     }
     .barra-header {
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-weight: 800;
         text-transform: uppercase;
         color: var(--text-color);
         border-bottom: 3px solid #FF4B4B;
-        margin-bottom: 8px;
-        padding-bottom: 4px;
+        margin-bottom: 5px;
+        padding-bottom: 2px;
     }
     .fila-rol {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 6px 0;
+        padding: 3px 0;
         border-bottom: 1px solid rgba(128, 128, 128, 0.1);
     }
     .badge {
-        padding: 2px 6px;
+        padding: 2px 5px;
         border-radius: 4px;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: bold;
         background-color: rgba(128, 128, 128, 0.15);
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIN DE SEGURIDAD ---
+# --- 2. LOGIN ---
 def check_password():
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = False
@@ -150,7 +171,7 @@ if FPDF:
         pdf.ln(5)
         pdf.set_fill_color(255, 200, 200)
         pdf.set_font("Arial", "B", 11)
-        pdf.cell(0, 8, f"BANCA / DISPONIBLES ({len(banca)})", 1, 1, 'L', fill=True)
+        pdf.cell(0, 8, f"BANCA ({len(banca)})", 1, 1, 'L', fill=True)
         pdf.set_font("Arial", "", 10)
         pdf.multi_cell(0, 7, ", ".join(banca), border=1)
         
@@ -214,7 +235,8 @@ def agregar_indice(df):
     return df_new
 
 def calc_altura(df):
-    return (len(df) * 35) + 38
+    # Altura ultra compacta (30px por fila) para evitar huecos
+    return (len(df) * 30) + 38
 
 def ejecutar_algoritmo(nombre_evento):
     datos = st.session_state['db_eventos'][nombre_evento]
@@ -265,7 +287,7 @@ def ejecutar_algoritmo(nombre_evento):
     return asignacion, banca, new_hist
 
 # --- 6. APP ---
-st.title("🍸 Barra Staff V1")
+st.title("🍸 Barra Staff V19")
 
 tab1, tab2, tab3, tab4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
@@ -292,7 +314,11 @@ with tab1:
     df_v = agregar_indice(df_v)
     h_n = calc_altura(df_v)
     st.dataframe(df_v, use_container_width=True, hide_index=True, height=h_n,
-                 column_config={"N°": st.column_config.NumberColumn("N°", width="small", format="%d")})
+                 column_config={
+                     "N°": st.column_config.NumberColumn("N°", width="small", format="%d"),
+                     "Nombre": st.column_config.TextColumn("Nombre", width="small"),
+                     "Cargo_Default": st.column_config.TextColumn("Cargo", width="small")
+                 })
 
 with tab2:
     with st.expander("🆕 Evento"):
@@ -345,7 +371,8 @@ with tab2:
                 
                 df_m = df_b[df_b['Nombre'].isin(lista_ok)].copy().drop(['OK', 'N°'], axis=1)
                 df_m['Es_Encargado'] = False; df_m['Es_Bartender'] = df_m['Cargo_Default']=='BARTENDER'; df_m['Es_Ayudante'] = df_m['Cargo_Default']=='AYUDANTE'
-                df_m = agregar_indice(df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']])
+                df_m = df_m[['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']] # Reordenar
+                df_m = agregar_indice(df_m)
                 h_m = calc_altura(df_m)
                 
                 mo = st.data_editor(df_m, use_container_width=True, hide_index=True, height=h_m,
@@ -373,7 +400,8 @@ with tab2:
                     nnba = c2.number_input("B", 0, 5, req['bar'], key=f"eb_{i}")
                     nnay = c3.number_input("A", 0, 5, req['ayu'], key=f"ea_{i}")
                     
-                    df_e = agregar_indice(barra['matriz_competencias'])
+                    df_e = barra['matriz_competencias'][['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante']]
+                    df_e = agregar_indice(df_e)
                     h_e = calc_altura(df_e)
                     me = st.data_editor(df_e, use_container_width=True, hide_index=True, height=h_e,
                         column_config={
@@ -407,7 +435,6 @@ with tab3:
         r = st.session_state['res']
         st.divider()
         
-        # EXPORT PDF
         if FPDF:
             pdf_data = generar_pdf(r['ev'], str(r['fecha']), r['plan'], r['banca'])
             st.download_button("📄 Descargar PDF", pdf_data, f"Plan_{r['ev']}.pdf", "application/pdf", type="primary", use_container_width=True)
@@ -457,6 +484,11 @@ with tab4:
                     st.session_state['db_logs_visuales'].pop(real_index)
                     guardar_datos()
                     st.rerun()
+                
+                if FPDF:
+                    pdf_h = generar_pdf(log['Evento'], log['Fecha'], log['Plan'], log['Banca'])
+                    st.download_button("📄 Descargar PDF", pdf_h, f"Hist_{log['Fecha']}.pdf", "application/pdf", key=f"pdf_h_{real_index}", use_container_width=True)
+
                 for b, eq in log['Plan'].items():
                     st.markdown(f"**{b}**")
                     for m in eq: st.text(f"{m.get('Icon','')} {m['Rol']}: {m['Nombre']}")
