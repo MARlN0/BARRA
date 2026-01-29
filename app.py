@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V38", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V39", page_icon="🍸", layout="wide")
 st.markdown("""
     <style>
     [data-testid="stElementToolbar"] { display: none !important; }
@@ -35,7 +35,17 @@ st.markdown("""
     .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    .ghost-text { font-size: 0.65rem; color: #AAA; font-family: monospace; display: block; text-align: right; margin-top: 2px; }
+    
+    /* ESTILO FANTASMA MEJORADO */
+    .ghost-text { 
+        font-size: 0.75rem; /* Un poco más grande */
+        color: #BBB; /* Más claro */
+        font-family: sans-serif;
+        display: block; 
+        text-align: right; 
+        margin-top: 2px;
+        font-style: italic;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -56,11 +66,9 @@ def check_login():
     return True
 if not check_login(): st.stop()
 
-# --- 3. DATOS ---
+# --- 3. DATA ---
 DB_FILE = "base_datos_staff.json"
-def clean_str(s): 
-    # LIMPIEZA EXTREMA: Mayusculas y sin espacios extra
-    return str(s).strip().upper() if s else ""
+def clean_str(s): return str(s).strip().upper() if s else ""
 
 def load_data():
     if os.path.exists(DB_FILE):
@@ -87,54 +95,67 @@ if 'db_staff' not in st.session_state:
     s, e, l = load_data()
     st.session_state.db_staff = s; st.session_state.db_eventos = e; st.session_state.db_logs = l
 
-# --- 4. HISTORIAL ---
-def get_forbidden_map(event_name):
-    # Mapa de prohibiciones basado en el ÚLTIMO log guardado
-    forbidden = {} # {NombrePersona: BarraDondeEstuvo}
-    last_log = None
+# --- 4. FUNCIÓN HISTORIAL DETALLADO ---
+def get_detailed_history(person_name, event_name):
+    """Devuelve dónde estuvo la persona la última vez en este evento"""
+    # Buscamos en orden inverso (del más reciente al más antiguo)
     for log in reversed(st.session_state.db_logs):
         if log['Evento'] == event_name:
-            last_log = log
-            break
-            
-    if last_log:
-        for bar_name, team in last_log['Plan'].items():
-            for member in team:
-                p_name = member['Nombre']
-                if p_name != "VACANTE" and not member.get('IsSupport', False):
-                    forbidden[clean_str(p_name)] = clean_str(bar_name)
-                    
-        try: d_str = datetime.strptime(last_log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
-        except: d_str = last_log['Fecha']
-        return forbidden, d_str, last_log['Plan']
-    
-    return {}, "", {}
+            # Encontramos el último registro de este evento
+            # Ahora buscamos a la persona
+            for bar_name, team in log['Plan'].items():
+                for member in team:
+                    if clean_str(member['Nombre']) == clean_str(person_name):
+                        # Formato fecha
+                        try: d_str = datetime.strptime(log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
+                        except: d_str = log['Fecha']
+                        
+                        return f"🔙 Estuvo en: {bar_name} ({d_str})"
+            # Si terminamos de revisar ese evento y no estaba, retornamos vacío (estaba en banca o no fue)
+            return "" 
+    return "" # Nunca ha trabajado en este evento
+
+def get_forbidden_map(event_name):
+    # Mapa simple {Persona: Barra} para el algoritmo matemático
+    forbidden = {}
+    for log in reversed(st.session_state.db_logs):
+        if log['Evento'] == event_name:
+            for bar_name, team in log['Plan'].items():
+                for member in team:
+                    p = clean_str(member['Nombre'])
+                    if p != "VACANTE" and not member.get('IsSupport'):
+                        forbidden[p] = clean_str(bar_name)
+            break # Solo importa la última vez inmediata
+    return forbidden
 
 # --- 5. ALGORITMO (TOLERANCIA CERO) ---
 def run_allocation(event_name):
     ed = st.session_state.db_eventos[event_name]
-    forbidden_map, _, _ = get_forbidden_map(event_name)
+    forbidden_map = get_forbidden_map(event_name) # Obtener lista negra
     
     active = set(ed['Staff_Convocado'])
     allo = {}; assigned = set()
     
     for barra in ed['Barras']:
-        bn = barra['nombre']; req = barra['requerimientos']; mat = barra['matriz_competencias']
-        mat = mat[mat['Nombre'].isin(active)]
+        bn = clean_str(barra['nombre'])
+        req = barra['requerimientos']
+        mat = barra['matriz_competencias']
+        mat = mat[mat['Nombre'].isin(active)] # Solo habilitados
         team = []
         
         def pick(role_l, role_i, check_col):
-            # Filtro base
             cands = mat[(mat[check_col]==True) & (~mat['Nombre'].isin(assigned))]
             valid_candidates = []
             
             for _, r in cands.iterrows():
                 p = r['Nombre']
-                # CHECKEO DE SEGURIDAD
-                bar_prohibida = forbidden_map.get(clean_str(p), "")
+                p_clean = clean_str(p)
                 
-                # Si la barra prohibida es IGUAL a la actual -> DESCARTAR
-                if bar_prohibida == clean_str(bn):
+                # LA REGLA DE ORO:
+                last_bar = forbidden_map.get(p_clean, "")
+                
+                # Si la barra pasada es igual a la actual -> BLOQUEAR
+                if last_bar == bn:
                     continue 
                 
                 valid_candidates.append(p)
@@ -144,13 +165,13 @@ def run_allocation(event_name):
                 assigned.add(ch)
                 team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': ch, 'IsSupport': False})
             else:
-                # Si todos están quemados -> VACANTE
+                # Si todos están bloqueados por repetición -> VACANTE
                 team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': 'VACANTE', 'IsSupport': False})
 
         for _ in range(req['enc']): pick('Encargado', '👑', 'Es_Encargado')
         for _ in range(req['bar']): pick('Bartender', '🍺', 'Es_Bartender')
         for _ in range(req['ayu']): pick('Ayudante', '🧊', 'Es_Ayudante')
-        allo[bn] = team
+        allo[barra['nombre']] = team
 
     banca = [p for p in ed['Staff_Convocado'] if p not in assigned]
     return allo, banca
@@ -166,12 +187,14 @@ def get_pdf_bytes(evento, fecha, plan):
     for i in range(0, len(sb), 2):
         if pdf.get_y() > 250: pdf.add_page()
         yst = pdf.get_y()
+        # I
         b1, t1 = sb[i]; pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
         pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
         for m in t1:
             r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
             pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
         h1 = pdf.get_y() - yst
+        # D
         h2 = 0
         if i+1 < len(sb):
             b2, t2 = sb[i+1]; pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
@@ -220,7 +243,7 @@ def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); r
 def calc_altura(df): return (len(df) * 35) + 38
 
 # --- 8. UI ---
-st.title("🍸 Barra Staff V38")
+st.title("🍸 Barra Staff V39")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -231,7 +254,7 @@ with t1:
             if nn and clean_str(nn) not in [clean_str(x) for x in st.session_state.db_staff['Nombre'].values]:
                 st.session_state.db_staff = pd.concat([st.session_state.db_staff, pd.DataFrame({'Nombre':[nn.strip()], 'Cargo_Default':[nr]})], ignore_index=True)
                 save_data(); st.success("Ok"); st.rerun()
-            else: st.error("Nombre inválido o duplicado")
+            else: st.error("Duplicado o vacío")
     df_rh = st.session_state.db_staff.copy(); df_rh.insert(0, "N°", range(1, len(df_rh)+1))
     to_del = st.multiselect("Borrar:", df_rh['Nombre'].tolist())
     if st.button("🗑️"):
@@ -254,7 +277,7 @@ with t2:
     df_g = st.session_state.db_staff.copy(); df_g['OK'] = df_g['Nombre'].isin(evd['Staff_Convocado'])
     df_g = df_g[['OK', 'Nombre', 'Cargo_Default']]
     ed = st.data_editor(df_g, column_config={"OK": st.column_config.CheckboxColumn("✅", width="small")}, use_container_width=True, hide_index=True, height=calc_altura(df_g))
-    if st.button("💾 Guardar"):
+    if st.button("💾 Guardar Plantilla"):
         st.session_state.db_eventos[curr_ev]['Staff_Convocado'] = ed[ed['OK']==True]['Nombre'].tolist(); save_data(); st.rerun()
 
     st.write("#### 2. Barras")
@@ -279,44 +302,6 @@ with t2:
             if st.button("Update", key=f"u{i}"):
                 st.session_state.db_eventos[curr_ev]['Barras'][i]['matriz_competencias'] = eb.drop('N°', axis=1).to_dict(orient='records'); save_data(); st.rerun()
 
-# --- HELPER PARA RENDERIZAR CARTAS ---
-def render_cards(plan, banca, event_name, prev_complete_plan):
-    edit_mode = st.toggle("✏️ Editar")
-    cols = st.columns(3); idx = 0
-    for bn, tm in plan.items():
-        with cols[idx%3]:
-            st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
-            for i, m in enumerate(tm):
-                pn = m['Nombre']
-                
-                # BUSCAR INFO HISTÓRICA EXACTA
-                ghost = ""
-                # Buscamos si esta persona estuvo en esta barra la vez pasada
-                if prev_complete_plan and bn in prev_complete_plan:
-                    # Buscamos en el equipo previo de ESTA barra
-                    prev_team = prev_complete_plan[bn]
-                    # Encontrar a la persona en ese equipo (si estaba)
-                    found_prev = next((pm for pm in prev_team if pm['Nombre'] == pn), None)
-                    
-                    if found_prev:
-                        # Estuvo aquí!
-                        r_prev = found_prev['Rol'][:3]
-                        # Necesitamos la fecha del log anterior. Como no la pasamos aqui, usamos un placeholder o la sacamos de get_forbidden
-                        _, d_str, _ = get_forbidden_map(event_name)
-                        ghost = f"({bn} • {r_prev} • {d_str})"
-                
-                if edit_mode and not m.get('IsSupport'):
-                    np = st.selectbox(f"{m['Icon']}", [pn]+sorted(banca), key=f"s_{bn}_{i}", label_visibility="collapsed")
-                    if np != pn:
-                        if pn!="VACANTE": banca.append(pn)
-                        if np!="VACANTE" and np in banca: banca.remove(np)
-                        m['Nombre'] = np; st.rerun()
-                else:
-                    c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
-                    st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-        idx+=1
-
 with t3:
     c1, c2 = st.columns(2); od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", list(st.session_state.db_eventos.keys()), key="oe")
     
@@ -326,9 +311,6 @@ with t3:
     
     if 'temp' in st.session_state and st.session_state.temp['e'] == oe:
         res = st.session_state.temp
-        
-        # OBTENER DATOS PREVIOS PARA VISUALIZACIÓN
-        _, _, prev_plan = get_forbidden_map(oe)
         
         if res['b']: st.warning(f"⚠️ Banca: {', '.join(res['b'])}")
         else: st.success("✅ Full")
@@ -347,8 +329,31 @@ with t3:
         img = get_img_bytes(res['e'], str(res['d']), res['p'])
         c2.download_button("📷 IMG", img, "p.png", "image/png", use_container_width=True, type="primary")
         
-        # RENDERIZAR TARJETAS EN OPERACIÓN
-        render_cards(res['p'], res['b'], res['e'], prev_plan)
+        em = st.toggle("✏️ Edit")
+        cols = st.columns(3); idx = 0
+        for bn, tm in res['p'].items():
+            with cols[idx%3]:
+                st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
+                for i, m in enumerate(tm):
+                    pn = m['Nombre']
+                    
+                    # --- GHOST TEXT REVELADOR ---
+                    # Esto busca explícitamente DONDE ESTUVO
+                    ghost = ""
+                    if pn != "VACANTE":
+                        ghost = get_detailed_history(pn, oe)
+                    
+                    if em and not m.get('IsSupport'):
+                        np = st.selectbox(f"{m['Icon']}", [pn]+sorted(res['b']), key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        if np != pn:
+                            if pn!="VACANTE": res['b'].append(pn)
+                            if np!="VACANTE" and np in res['b']: res['b'].remove(np)
+                            m['Nombre'] = np; st.rerun()
+                    else:
+                        c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
+                        st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+            idx+=1
             
         if st.button("💾 CERRAR FECHA", type="primary", use_container_width=True):
             st.session_state.db_logs.append({'Fecha':str(res['d']), 'Evento':res['e'], 'Plan':res['p'], 'Banca':res['b']})
@@ -364,21 +369,17 @@ with t4:
                 if c1.button("🗑️", key=f"d_{rx}"): st.session_state.db_logs.pop(rx); save_data(); st.rerun()
                 if FPDF:
                     p = get_pdf_bytes(l['Evento'], l['Fecha'], l['Plan'])
-                    c2.download_button("📄 PDF", p, "h.pdf", "application/pdf", key=f"p_{rx}", type="primary", use_container_width=True)
-                i_b = get_img_bytes(l['Evento'], l['Fecha'], l['Plan'])
-                c3.download_button("📷 IMG", i_b, "h.png", "image/png", key=f"i_{rx}", type="primary", use_container_width=True)
+                    c2.download_button("📄", p, "h.pdf", "application/pdf", key=f"p_{rx}")
+                ib = get_img_bytes(l['Evento'], l['Fecha'], l['Plan'])
+                c3.download_button("📷", ib, "h.png", "image/png", key=f"i_{rx}")
                 
-                # AQUI ESTÁ EL CAMBIO: Usamos render_cards para mostrar bonito el historial también
-                # Pasamos 'prev_plan' como None porque en el historial estático no necesitamos calcular ghost text dinámico (o ya está implícito)
-                # Ojo: render_cards espera una banca editable, pero aqui solo queremos ver.
-                # Simplificación: Render manual con estilo tarjeta para Historial
-                
+                # VISTA VISUAL DEL HISTORIAL (IGUAL QUE OPERACIÓN)
                 cols = st.columns(3); idx = 0
                 for bn, tm in l['Plan'].items():
                     with cols[idx%3]:
                         st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                         for m in tm:
                             c = "#FF4B4B" if m['Nombre']=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
-                            st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{m['Nombre']}</div></div></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div class='name-text' style='color:{c}'>{m['Nombre']}</div></div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
                     idx+=1
