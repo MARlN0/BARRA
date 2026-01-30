@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V43", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V44", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,26 +26,35 @@ st.markdown("""
 
     @media (max-width: 768px) {
         .block-container { padding-bottom: 6rem !important; padding-left: 0.2rem; padding-right: 0.2rem; }
+        /* TABLAS ESTÁTICAS Y COMPACTAS */
         div[data-testid="stDataEditor"] table { font-size: 12px !important; }
         div[data-testid="stDataEditor"] th { padding: 4px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px !important; line-height: 1.2 !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 38px !important; height: 38px !important; align-items: center; }
+        
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; border-radius: 10px !important; }
+        
+        /* Botones pequeños de eliminar (X) */
+        .small-btn button { width: auto !important; height: 2rem !important; background-color: #444 !important; }
     }
 
     /* TARJETAS */
     .plan-card { background-color: #1E1E1E; border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
     .barra-title { font-size: 1.1rem; font-weight: 800; color: #FFF; border-bottom: 2px solid #FF4B4B; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; }
-    .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
+    
+    /* FILA DE PERSONA EN OPERACIÓN */
+    .row-person { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #333; }
+    
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    .ghost-text { font-size: 0.7rem; color: #AAA; font-style: italic; display: block; text-align: right; margin-top: 2px; }
     
-    /* BOTONES PRINCIPALES (GUARDAR/GENERAR) - VERDES O ROJOS STANDARD */
-    .stButton button { background-color: #FF4B4B; color: white; border: none; }
+    .ghost-text { font-size: 0.65rem; color: #AAA; font-family: monospace; display: block; text-align: right; margin-top: 2px; }
     
-    /* ESTILO PARA ZONA DE PELIGRO */
-    .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 10px; }
+    /* ZONA DE PELIGRO */
+    .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
+    
+    /* COLUMNAS DEL EDITOR */
+    [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 150px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -105,27 +114,40 @@ if 'db_staff' not in st.session_state:
     s, e, l = load_data()
     st.session_state.db_staff = s; st.session_state.db_eventos = e; st.session_state.db_logs = l
 
-# --- 4. FUNCIÓN HISTORIAL ---
-def get_forbidden_map(event_name):
-    forbidden = {}
-    last_log = None
+# --- 4. HISTORIAL INTELIGENTE ---
+def get_detailed_history(person_name, event_name):
+    # Buscar qué hizo esta persona la última vez
     for log in reversed(st.session_state.db_logs):
-        if log['Evento'] == event_name: last_log = log; break     
-    if last_log:
-        for bar_name, team in last_log['Plan'].items():
-            for member in team:
-                p_name = clean_str(member['Nombre'])
-                if p_name != "VACANTE" and not member.get('IsSupport', False):
-                    forbidden[p_name] = clean_str(bar_name)
-        try: d_str = datetime.strptime(last_log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
-        except: d_str = last_log['Fecha']
-        return forbidden, d_str, last_log['Plan']
-    return {}, "", {}
+        if log['Evento'] == event_name:
+            for bar_name, team in log['Plan'].items():
+                for member in team:
+                    if clean_str(member['Nombre']) == clean_str(person_name):
+                        # Encontrado: Formatear dato
+                        try: d_str = datetime.strptime(log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
+                        except: d_str = log['Fecha']
+                        
+                        r_code = member['Rol'][:3] # Enc, Bar, Ayu
+                        return f"🔙 {bar_name} ({r_code} - {d_str})"
+            return "" # Estuvo en banca o no fue
+    return ""
 
-# --- 5. ALGORITMO ---
+def get_forbidden_map(event_name):
+    # Mapa para el algoritmo: {Persona: BarraDondeEstuvo}
+    forbidden = {}
+    for log in reversed(st.session_state.db_logs):
+        if log['Evento'] == event_name:
+            for bar_name, team in log['Plan'].items():
+                for member in team:
+                    p = clean_str(member['Nombre'])
+                    if p != "VACANTE" and not member.get('IsSupport', False):
+                        forbidden[p] = clean_str(bar_name)
+            break
+    return forbidden
+
+# --- 5. ALGORITMO (TOLERANCIA CERO) ---
 def run_allocation(event_name):
     ed = st.session_state.db_eventos[event_name]
-    forbidden_map, _, _ = get_forbidden_map(event_name)
+    forbidden_map = get_forbidden_map(event_name)
     active = set(ed['Staff_Convocado']); allo = {}; assigned = set()
     
     for barra in ed['Barras']:
@@ -139,6 +161,7 @@ def run_allocation(event_name):
             valid_candidates = []
             for _, r in cands.iterrows():
                 p = r['Nombre']; p_clean = clean_str(p)
+                # REGLA DE ORO: SI YA ESTUVO, NO REPITE.
                 if forbidden_map.get(p_clean) == bn: continue 
                 valid_candidates.append(p)
             
@@ -214,36 +237,23 @@ def get_img_bytes(evento, fecha, plan):
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
 # --- 7. UTILS ---
+def delete_confirm_ui(key, action, label):
+    if f"ds_{key}" not in st.session_state: st.session_state[f"ds_{key}"] = False
+    if not st.session_state[f"ds_{key}"]:
+        if st.button(f"🗑️ {label}", key=f"btn_{key}"): st.session_state[f"ds_{key}"] = True; st.rerun()
+    else:
+        st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
+        st.warning("¿Seguro? No hay vuelta atrás.")
+        c1, c2 = st.columns(2)
+        if c1.button("⚠️ SÍ, BORRAR", key=f"y_{key}", type="primary"): action(); st.session_state[f"ds_{key}"] = False; st.rerun()
+        if c2.button("CANCELAR", key=f"n_{key}"): st.session_state[f"ds_{key}"] = False; st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
 def ordenar_staff(df): return df.sort_values(by=['Cargo_Default', 'Nombre'], ascending=[True, True])
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
-# --- UI HELPER: DELETE CONFIRM ---
-def delete_confirm_ui(key_suffix, on_confirm, label="Eliminar"):
-    """Crea una interfaz de borrado seguro en dos pasos"""
-    # Paso 1: Botón inicial (Gris/Neutro)
-    if f"del_stage_{key_suffix}" not in st.session_state:
-        st.session_state[f"del_stage_{key_suffix}"] = False
-
-    if not st.session_state[f"del_stage_{key_suffix}"]:
-        if st.button(f"🗑️ {label}", key=f"btn_init_{key_suffix}"):
-            st.session_state[f"del_stage_{key_suffix}"] = True
-            st.rerun()
-    else:
-        # Paso 2: Zona de peligro
-        st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
-        st.warning("¿Estás seguro? Esta acción es irreversible.")
-        c1, c2 = st.columns(2)
-        if c1.button("⚠️ SÍ, ELIMINAR", key=f"btn_yes_{key_suffix}", type="primary"):
-            on_confirm()
-            st.session_state[f"del_stage_{key_suffix}"] = False
-            st.rerun()
-        if c2.button("Cancelar", key=f"btn_no_{key_suffix}"):
-            st.session_state[f"del_stage_{key_suffix}"] = False
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
 # --- 8. UI ---
-st.title("🍸 Barra Staff V43")
+st.title("🍸 Barra Staff V44")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -258,19 +268,10 @@ with t1:
     
     st.divider()
     df_rh = st.session_state.db_staff.copy(); df_rh.insert(0, "N°", range(1, len(df_rh)+1))
-    
-    # SELECCIÓN Y BORRADO SEGURO DE PERSONAL
-    st.write("##### Nómina Activa")
-    to_del = st.multiselect("Selecciona para borrar:", df_rh['Nombre'].tolist())
-    
+    to_del = st.multiselect("Borrar Personal:", df_rh['Nombre'].tolist())
     if to_del:
-        def delete_staff():
-            st.session_state.db_staff = st.session_state.db_staff[~st.session_state.db_staff['Nombre'].isin(to_del)]
-            save_data()
-            st.success("Personal eliminado")
-        
-        delete_confirm_ui("staff_del", delete_staff, "Borrar Seleccionados")
-
+        def del_rh_act(): st.session_state.db_staff = st.session_state.db_staff[~st.session_state.db_staff['Nombre'].isin(to_del)]; save_data()
+        delete_confirm_ui("del_rh", del_rh_act, "Eliminar Seleccionados")
     st.dataframe(df_rh, use_container_width=True, hide_index=True, height=calc_altura(df_rh))
 
 with t2:
@@ -283,52 +284,53 @@ with t2:
     if not evs: st.stop()
     curr_ev = st.selectbox("Evento:", evs); evd = st.session_state.db_eventos[curr_ev]
     
-    # BORRADO SEGURO DE EVENTO (EN EXPANDER APARTE)
-    with st.expander("🗑️ ZONA DE PELIGRO: Eliminar Evento Actual"):
-        def delete_event():
-            del st.session_state.db_eventos[curr_ev]
-            save_data()
-        delete_confirm_ui(f"del_ev_{curr_ev}", delete_event, f"Eliminar Evento '{curr_ev}'")
+    def del_ev_act(): del st.session_state.db_eventos[curr_ev]; save_data()
+    with st.expander("Opciones de Evento"): delete_confirm_ui("del_ev", del_ev_act, f"Eliminar Evento '{curr_ev}'")
     
-    st.divider()
     st.write("#### 1. Plantilla")
     df_g = st.session_state.db_staff.copy(); df_g['OK'] = df_g['Nombre'].isin(evd['Staff_Convocado'])
-    df_g = df_g[['OK', 'Nombre', 'Cargo_Default']] # ROL VISIBLE AQUI
+    df_g = df_g[['OK', 'Nombre', 'Cargo_Default']]
     ed = st.data_editor(df_g, column_config={"OK": st.column_config.CheckboxColumn("✅", width="small")}, use_container_width=True, hide_index=True, height=calc_altura(df_g))
     if st.button("💾 Guardar Plantilla"):
         st.session_state.db_eventos[curr_ev]['Staff_Convocado'] = ed[ed['OK']==True]['Nombre'].tolist(); save_data(); st.rerun()
 
-    st.markdown("---")
     st.write("#### 2. Barras")
-    with st.expander("➕ Añadir Nueva Barra"):
-        bn = st.text_input("Nombre Barra"); c1, c2, c3 = st.columns(3)
+    with st.expander("➕ Añadir Barra"):
+        bn = st.text_input("Nombre"); c1, c2, c3 = st.columns(3)
         ne = c1.number_input("Enc", 0, 5, 1); nb = c2.number_input("Bar", 0, 5, 1); na = c3.number_input("Ayu", 0, 5, 1)
         lok = evd['Staff_Convocado']
         if lok:
             dfm = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)].copy()
             dfm['Es_Encargado']=False; dfm['Es_Bartender']=dfm['Cargo_Default']=='BARTENDER'; dfm['Es_Ayudante']=dfm['Cargo_Default']=='AYUDANTE'
-            # SIN ROL AQUI
-            em = st.data_editor(agregar_indice(dfm[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), use_container_width=True, hide_index=True, height=calc_altura(dfm))
+            # COLUMNAS ESTÁTICAS Y JERARQUÍA
+            em = st.data_editor(
+                agregar_indice(dfm[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
+                column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
+                use_container_width=True, hide_index=True, height=calc_altura(dfm)
+            )
             if st.button("Guardar Barra"):
                 st.session_state.db_eventos[curr_ev]['Barras'].append({'nombre': bn, 'requerimientos': {'enc': ne, 'bar': nb, 'ayu': na}, 'matriz_competencias': em.drop('N°', axis=1).to_dict(orient='records')}); save_data(); st.rerun()
 
-    # LISTADO DE BARRAS CON BORRADO SEGURO AL FINAL
     for i, b in enumerate(evd['Barras']):
         with st.expander(f"✏️ {b['nombre']}"):
             dfc = pd.DataFrame(b['matriz_competencias']); dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
             m = pd.merge(dfr, dfc, on='Nombre', how='left')
             m['Es_Encargado'].fillna(False, inplace=True); m['Es_Bartender'].fillna(m['Cargo_Default']=='BARTENDER', inplace=True); m['Es_Ayudante'].fillna(m['Cargo_Default']=='AYUDANTE', inplace=True)
-            eb = st.data_editor(agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), key=f"e{i}", use_container_width=True, hide_index=True, height=calc_altura(m))
             
-            if st.button("Actualizar Cambios", key=f"u{i}"):
+            # COLUMNAS ESTÁTICAS AL EDITAR TAMBIÉN
+            eb = st.data_editor(
+                agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
+                key=f"e{i}", 
+                column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
+                use_container_width=True, hide_index=True, height=calc_altura(m)
+            )
+            
+            if st.button("Actualizar", key=f"u{i}"):
                 st.session_state.db_eventos[curr_ev]['Barras'][i]['matriz_competencias'] = eb.drop('N°', axis=1).to_dict(orient='records'); save_data(); st.success("Guardado")
             
             st.divider()
-            # BORRADO SEGURO DE BARRA
-            def delete_bar(idx=i):
-                st.session_state.db_eventos[curr_ev]['Barras'].pop(idx)
-                save_data()
-            delete_confirm_ui(f"del_bar_{i}", delete_bar, f"Eliminar Barra '{b['nombre']}'")
+            def del_bar_act(idx=i): st.session_state.db_eventos[curr_ev]['Barras'].pop(idx); save_data()
+            delete_confirm_ui(f"del_b_{i}", lambda: del_bar_act(i), f"Eliminar {b['nombre']}")
 
 with t3:
     c1, c2 = st.columns(2); od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", list(st.session_state.db_eventos.keys()), key="oe")
@@ -341,7 +343,6 @@ with t3:
     
     if 'temp' in st.session_state and st.session_state.temp['e'] == oe:
         res = st.session_state.temp
-        _, _, prev_plan_complete = get_forbidden_map(oe)
         
         if res['b']: st.warning(f"⚠️ Banca: {', '.join(res['b'])}")
         else: st.success("✅ Full")
@@ -354,13 +355,11 @@ with t3:
                 st.rerun()
         
         c1, c2 = st.columns(2)
-        st.markdown('<div class="big-btn">', unsafe_allow_html=True)
         if FPDF: 
             pdf = get_pdf_bytes(res['e'], str(res['d']), res['p'])
             c1.download_button("📄 PDF", pdf, "p.pdf", "application/pdf", use_container_width=True, type="primary")
         img = get_img_bytes(res['e'], str(res['d']), res['p'])
         c2.download_button("📷 IMG", img, "p.png", "image/png", use_container_width=True, type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
         
         em = st.toggle("✏️ Edit")
         cols = st.columns(3); idx = 0
@@ -369,20 +368,33 @@ with t3:
                 st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                 for i, m in enumerate(tm):
                     pn = m['Nombre']
+                    # --- GHOST TEXT DETALLADO ---
                     ghost = ""
-                    if prev_plan_complete:
-                        for p_bar, p_team in prev_plan_complete.items():
-                            for p_mem in p_team:
-                                if clean_str(p_mem['Nombre']) == clean_str(pn):
-                                    _, d_str, _ = get_forbidden_map(oe)
-                                    ghost = f"🔙 Estuvo en: {p_bar} ({d_str})"
+                    if pn != "VACANTE":
+                        ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        np = st.selectbox(f"{m['Icon']}", [pn]+sorted(res['b']), key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        # Boton X para sacar
+                        c_sel, c_del = st.columns([8, 2])
+                        with c_sel:
+                            # Opcion Quitar en Dropdown
+                            opts = [pn, "[QUITAR / VACANTE]"] + sorted(res['b'])
+                            np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        with c_del:
+                            # Boton X fisico
+                            if st.button("❌", key=f"x_{bn}_{i}", help="Enviar a Banca"):
+                                np = "[QUITAR / VACANTE]"
+                        
+                        # Logica de cambio
                         if np != pn:
-                            if pn!="VACANTE": res['b'].append(pn)
-                            if np!="VACANTE" and np in res['b']: res['b'].remove(np)
-                            m['Nombre'] = np; st.rerun()
+                            if pn != "VACANTE": res['b'].append(pn) # El actual se va a banca
+                            
+                            if np == "[QUITAR / VACANTE]":
+                                m['Nombre'] = "VACANTE"
+                            else:
+                                if np != "VACANTE" and np in res['b']: res['b'].remove(np)
+                                m['Nombre'] = np
+                            st.rerun()
                     else:
                         c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
                         st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
@@ -399,14 +411,8 @@ with t4:
         for i, l in enumerate(reversed(st.session_state.db_logs)):
             rx = len(st.session_state.db_logs)-1-i
             with st.expander(f"📅 {l['Fecha']} - {l['Evento']}"):
-                
-                # BORRADO SEGURO DE LOG
-                def delete_log(idx=rx):
-                    st.session_state.db_logs.pop(idx)
-                    save_data()
-                delete_confirm_ui(f"del_log_{rx}", delete_log, "Eliminar Registro")
-                
-                st.divider()
+                def del_log_act(idx=rx): st.session_state.db_logs.pop(idx); save_data()
+                delete_confirm_ui(f"del_log_{rx}", lambda: del_log_act(rx), "Eliminar Registro")
                 
                 if FPDF:
                     p = get_pdf_bytes(l['Evento'], l['Fecha'], l['Plan'])
