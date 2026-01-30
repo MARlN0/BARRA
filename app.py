@@ -270,7 +270,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V49")
+st.title("🍸 Barra Staff ")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -469,3 +469,4 @@ with t4:
                             st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div class='name-text' style='color:{c}'>{m['Nombre']}</div></div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
                     idx+=1
+
