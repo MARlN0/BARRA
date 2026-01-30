@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V48", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V49", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -34,15 +34,6 @@ st.markdown("""
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 38px !important; height: 38px !important; align-items: center; }
         
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; border-radius: 10px !important; }
-        
-        /* AJUSTE BOTÓN X PEQUEÑO (ALINEADO) */
-        div[data-testid="column"] button[kind="secondary"] { 
-            height: 2.8rem !important; 
-            min-height: 2.8rem !important; 
-            padding: 0px 5px !important;
-            width: 100% !important;
-            border: 1px solid #444;
-        }
     }
 
     .plan-card { background-color: #1E1E1E; border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
@@ -266,7 +257,7 @@ def delete_confirm_ui(key, action, label):
         if st.button(f"🗑️ {label}", key=f"btn_{key}"): st.session_state[f"ds_{key}"] = True; st.rerun()
     else:
         st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
-        st.warning("¿Seguro?")
+        st.warning("¿Seguro? No hay vuelta atrás.")
         c1, c2 = st.columns(2)
         if c1.button("⚠️ SÍ, BORRAR", key=f"y_{key}", type="primary"): action(); st.session_state[f"ds_{key}"] = False; st.rerun()
         if c2.button("CANCELAR", key=f"n_{key}"): st.session_state[f"ds_{key}"] = False; st.rerun()
@@ -279,7 +270,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V48")
+st.title("🍸 Barra Staff V49")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -319,6 +310,7 @@ with t2:
     st.write("#### 1. Plantilla")
     df_g = st.session_state.db_staff.copy(); df_g['OK'] = df_g['Nombre'].isin(evd['Staff_Convocado'])
     df_g = ordenar_staff(df_g); df_g = df_g[['OK', 'Nombre', 'Cargo_Default']]
+    
     ed = st.data_editor(
         agregar_indice(df_g), 
         column_config={"OK": st.column_config.CheckboxColumn("✅", width="small")},
@@ -403,7 +395,6 @@ with t3:
                 st.rerun()
         
         c1, c2 = st.columns(2)
-        st.markdown('<div class="big-btn">', unsafe_allow_html=True)
         if FPDF: 
             pdf = get_pdf_bytes(res['e'], str(res['d']), res['p'])
             c1.download_button("📄 PDF", pdf, "p.pdf", "application/pdf", use_container_width=True, type="primary")
@@ -422,31 +413,18 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        # --- FIX LAYOUT: COLUMNAS PARA ALINEAR X ---
-                        c_sel, c_btn = st.columns([0.85, 0.15])
-                        with c_sel:
-                            # Lista de opciones: VACANTE + Banca + Actual
-                            ops = ["VACANTE"] + sorted(res['b'])
-                            if pn not in ops and pn != "VACANTE": ops.append(pn)
-                            
-                            # Intentar seleccionar actual
-                            try: idx_sel = ops.index(pn)
-                            except: idx_sel = 0
-                            
-                            np = st.selectbox(f"{m['Icon']}", ops, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
-                            
-                            # Mostrar el historial justo debajo
-                            if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
+                        # Lista de opciones: VACANTE + Banca + Actual
+                        ops = ["VACANTE"] + sorted(res['b'])
+                        if pn not in ops and pn != "VACANTE": ops.append(pn)
+                        
+                        try: idx_sel = ops.index(pn)
+                        except: idx_sel = 0
+                        
+                        np = st.selectbox(f"{m['Icon']}", ops, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        
+                        if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
 
-                        with c_btn:
-                            # BOTÓN X AL COSTADO
-                            if st.button("✖️", key=f"x_{bn}_{i}", type="secondary"):
-                                if pn != "VACANTE":
-                                    res['b'].append(pn); res['b'].sort()
-                                m['Nombre'] = "VACANTE"
-                                st.rerun()
-
-                        # LOGICA DE CAMBIO EN SELECTBOX
+                        # LOGICA DE CAMBIO
                         if np != pn:
                             if pn != "VACANTE": 
                                 res['b'].append(pn); res['b'].sort()
@@ -457,7 +435,6 @@ with t3:
                                 if np in res['b']: res['b'].remove(np)
                                 m['Nombre'] = np
                             st.rerun()
-                            
                     else:
                         c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
                         st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
