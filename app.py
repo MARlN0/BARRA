@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V45", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V46", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -39,9 +39,10 @@ st.markdown("""
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
     .ghost-text { font-size: 0.7rem; color: #AAA; font-style: italic; display: block; text-align: right; margin-top: 2px; }
-    
-    /* ZONA DE PELIGRO */
     .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
+    
+    /* COLUMNAS FIJAS */
+    [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -222,46 +223,30 @@ def get_img_bytes(evento, fecha, plan):
         curr_y += max(h1, h2) + P
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 7. REPORTE DE CONFIGURACIÓN (NUEVO) ---
+# --- 7. REPORTE DE GESTIÓN (DETALLADO) ---
 def generate_config_pdf(event_name, staff_list, bars_data):
     if not FPDF: return None
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"REPORTE DE CONFIGURACION: {event_name}", 0, 1, 'C')
-    pdf.ln(5)
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, f"INFORME DE GESTION: {event_name}", 0, 1, 'C'); pdf.ln(5)
     
-    # 1. PLANTILLA
-    pdf.set_fill_color(200, 220, 255)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, f"1. PERSONAL HABILITADO ({len(staff_list)})", 1, 1, 'L', fill=True)
-    pdf.set_font("Arial", "", 10)
-    
-    # Obtener roles
-    df_roles = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(staff_list)]
-    df_roles = ordenar_staff(df_roles) # Ordenar jerárquico
-    
-    col_count = 0
-    for _, row in df_roles.iterrows():
-        # Imprimir en 3 columnas
-        pdf.cell(60, 8, f"{row['Nombre']} ({row['Cargo_Default'][:3]})", 1, 0)
-        col_count += 1
-        if col_count == 3:
-            pdf.ln()
-            col_count = 0
-    if col_count > 0: pdf.ln()
-    pdf.ln(5)
-    
-    # 2. BARRAS
-    pdf.set_fill_color(255, 220, 200)
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(0, 10, "2. ESTRUCTURA DE BARRAS", 1, 1, 'L', fill=True)
-    pdf.set_font("Arial", "", 10)
-    
+    # 1. BARRAS Y POTENCIAL
     for b in bars_data:
-        req = b['requerimientos']
-        info = f"{b['nombre'].upper()} -> Enc: {req['enc']} | Bar: {req['bar']} | Ayu: {req['ayu']}"
-        pdf.cell(0, 8, info, 1, 1)
+        pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 12)
+        pdf.cell(0, 8, f"BARRA: {b['nombre'].upper()}", 1, 1, 'L', fill=True)
+        pdf.set_font("Arial", "", 10)
+        
+        # Filtramos quienes pueden ser que
+        mat = pd.DataFrame(b['matriz_competencias'])
+        mat = mat[mat['Nombre'].isin(staff_list)] # Solo los convocados
+        
+        encs = mat[mat['Es_Encargado']==True]['Nombre'].tolist()
+        bars = mat[mat['Es_Bartender']==True]['Nombre'].tolist()
+        ayus = mat[mat['Es_Ayudante']==True]['Nombre'].tolist()
+        
+        pdf.multi_cell(0, 6, f"Posibles Encargados: {', '.join(encs)}", 1)
+        pdf.multi_cell(0, 6, f"Posibles Bartenders: {', '.join(bars)}", 1)
+        pdf.multi_cell(0, 6, f"Posibles Ayudantes: {', '.join(ayus)}", 1)
+        pdf.ln(3)
         
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
@@ -279,14 +264,13 @@ def delete_confirm_ui(key, action, label):
         st.markdown('</div>', unsafe_allow_html=True)
 
 def ordenar_staff(df):
-    # ORDEN JERARQUICO: BARTENDER (0) -> AYUDANTE (1) -> NOMBRE
     df['sort_key'] = df['Cargo_Default'].map({'BARTENDER': 0, 'AYUDANTE': 1})
     return df.sort_values(by=['sort_key', 'Nombre'], ascending=[True, True]).drop('sort_key', axis=1)
 
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V45")
+st.title("🍸 Barra Staff V46")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -301,8 +285,7 @@ with t1:
     
     st.divider()
     df_rh = st.session_state.db_staff.copy()
-    df_rh = ordenar_staff(df_rh) # Ordenar siempre
-    df_rh = agregar_indice(df_rh)
+    df_rh = ordenar_staff(df_rh); df_rh = agregar_indice(df_rh)
     
     to_del = st.multiselect("Borrar Personal:", df_rh['Nombre'].tolist())
     if to_del:
@@ -327,17 +310,11 @@ with t2:
     st.divider()
     st.write("#### 1. Plantilla")
     df_g = st.session_state.db_staff.copy(); df_g['OK'] = df_g['Nombre'].isin(evd['Staff_Convocado'])
-    df_g = ordenar_staff(df_g) # JERARQUÍA AQUÍ TAMBIÉN
-    df_g = df_g[['OK', 'Nombre', 'Cargo_Default']]
+    df_g = ordenar_staff(df_g); df_g = df_g[['OK', 'Nombre', 'Cargo_Default']]
     
-    # Usar column_order para forzar estático
     ed = st.data_editor(
         agregar_indice(df_g), 
-        column_config={
-            "OK": st.column_config.CheckboxColumn("✅", width="small"),
-            "Nombre": st.column_config.TextColumn("Nombre", width="medium", disabled=True),
-            "Cargo_Default": st.column_config.TextColumn("Rol", width="small", disabled=True)
-        },
+        column_config={"OK": st.column_config.CheckboxColumn("✅", width="small")},
         column_order=("N°", "OK", "Nombre", "Cargo_Default"),
         use_container_width=True, hide_index=True, height=calc_altura(df_g)
     )
@@ -346,14 +323,14 @@ with t2:
 
     st.markdown("---")
     st.write("#### 2. Barras")
-    with st.expander("➕ Añadir Nueva Barra"):
+    with st.expander("➕ Añadir Barra"):
         bn = st.text_input("Nombre Barra"); c1, c2, c3 = st.columns(3)
         ne = c1.number_input("Enc", 0, 5, 1); nb = c2.number_input("Bar", 0, 5, 1); na = c3.number_input("Ayu", 0, 5, 1)
         lok = evd['Staff_Convocado']
         if lok:
             dfm = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)].copy()
             dfm['Es_Encargado']=False; dfm['Es_Bartender']=dfm['Cargo_Default']=='BARTENDER'; dfm['Es_Ayudante']=dfm['Cargo_Default']=='AYUDANTE'
-            dfm = ordenar_staff(dfm) # JERARQUÍA
+            dfm = ordenar_staff(dfm)
             em = st.data_editor(
                 agregar_indice(dfm[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
                 column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
@@ -364,46 +341,39 @@ with t2:
 
     for i, b in enumerate(evd['Barras']):
         with st.expander(f"✏️ {b['nombre']}"):
-            # EDICIÓN DE METADATOS
-            c_meta_1, c_meta_2, c_meta_3, c_meta_4 = st.columns([3, 1, 1, 1])
-            new_name = c_meta_1.text_input("Nombre", b['nombre'], key=f"nm_{i}")
-            new_enc = c_meta_2.number_input("E", 0, 5, b['requerimientos']['enc'], key=f"rq1_{i}")
-            new_bar = c_meta_3.number_input("B", 0, 5, b['requerimientos']['bar'], key=f"rq2_{i}")
-            new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'], key=f"rq3_{i}")
-            
-            # Guardar cambios meta al vuelo
-            if new_name != b['nombre'] or new_enc != b['requerimientos']['enc'] or new_bar != b['requerimientos']['bar'] or new_ayu != b['requerimientos']['ayu']:
-                st.session_state.db_eventos[curr_ev]['Barras'][i]['nombre'] = new_name
-                st.session_state.db_eventos[curr_ev]['Barras'][i]['requerimientos'] = {'enc': new_enc, 'bar': new_bar, 'ayu': new_ayu}
-                save_data()
-            
-            # MATRIZ
-            dfc = pd.DataFrame(b['matriz_competencias']); dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
-            m = pd.merge(dfr, dfc, on='Nombre', how='left')
-            m['Es_Encargado'].fillna(False, inplace=True); m['Es_Bartender'].fillna(m['Cargo_Default']=='BARTENDER', inplace=True); m['Es_Ayudante'].fillna(m['Cargo_Default']=='AYUDANTE', inplace=True)
-            
-            eb = st.data_editor(
-                agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
-                key=f"e{i}", 
-                column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
-                use_container_width=True, hide_index=True, height=calc_altura(m)
-            )
-            
-            if st.button("Actualizar Matriz", key=f"u{i}"):
-                st.session_state.db_eventos[curr_ev]['Barras'][i]['matriz_competencias'] = eb.drop('N°', axis=1).to_dict(orient='records'); save_data(); st.success("Guardado")
+            with st.form(f"form_bar_{i}"):
+                c_meta_1, c_meta_2, c_meta_3, c_meta_4 = st.columns([3, 1, 1, 1])
+                new_name = c_meta_1.text_input("Nombre", b['nombre'])
+                new_enc = c_meta_2.number_input("E", 0, 5, b['requerimientos']['enc'])
+                new_bar = c_meta_3.number_input("B", 0, 5, b['requerimientos']['bar'])
+                new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'])
+                
+                dfc = pd.DataFrame(b['matriz_competencias']); dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
+                m = pd.merge(dfr, dfc, on='Nombre', how='left')
+                m['Es_Encargado'].fillna(False, inplace=True); m['Es_Bartender'].fillna(m['Cargo_Default']=='BARTENDER', inplace=True); m['Es_Ayudante'].fillna(m['Cargo_Default']=='AYUDANTE', inplace=True)
+                
+                eb = st.data_editor(
+                    agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
+                    column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
+                    use_container_width=True, hide_index=True, height=calc_altura(m)
+                )
+                
+                if st.form_submit_button("💾 Actualizar Datos"):
+                    st.session_state.db_eventos[curr_ev]['Barras'][i]['nombre'] = new_name
+                    st.session_state.db_eventos[curr_ev]['Barras'][i]['requerimientos'] = {'enc': new_enc, 'bar': new_bar, 'ayu': new_ayu}
+                    st.session_state.db_eventos[curr_ev]['Barras'][i]['matriz_competencias'] = eb.drop('N°', axis=1).to_dict(orient='records')
+                    save_data(); st.success("Guardado"); st.rerun()
             
             st.divider()
             def del_bar_act(idx=i): st.session_state.db_eventos[curr_ev]['Barras'].pop(idx); save_data()
             delete_confirm_ui(f"del_b_{i}", lambda: del_bar_act(i), f"Eliminar Barra '{b['nombre']}'")
             
-    # --- REPORTE DE CONFIGURACIÓN ---
     st.divider()
-    if st.button("📥 Descargar Reporte de Configuración (PDF)", type="secondary", use_container_width=True):
+    if st.button("📥 Descargar Reporte de Gestión (PDF)", type="secondary", use_container_width=True):
         if FPDF:
             pdf_conf = generate_config_pdf(curr_ev, evd['Staff_Convocado'], evd['Barras'])
-            # Usar un hack para descargar sin rerun
             b64 = base64.b64encode(pdf_conf).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Config_{curr_ev}.pdf">CLICK AQUÍ PARA DESCARGAR</a>'
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Gestion_{curr_ev}.pdf">CLICK AQUÍ PARA DESCARGAR</a>'
             st.markdown(href, unsafe_allow_html=True)
 
 with t3:
@@ -430,11 +400,13 @@ with t3:
                 st.rerun()
         
         c1, c2 = st.columns(2)
+        st.markdown('<div class="big-btn">', unsafe_allow_html=True)
         if FPDF: 
             pdf = get_pdf_bytes(res['e'], str(res['d']), res['p'])
             c1.download_button("📄 PDF", pdf, "p.pdf", "application/pdf", use_container_width=True, type="primary")
         img = get_img_bytes(res['e'], str(res['d']), res['p'])
         c2.download_button("📷 IMG", img, "p.png", "image/png", use_container_width=True, type="primary")
+        st.markdown('</div>', unsafe_allow_html=True)
         
         em = st.toggle("✏️ Edit")
         cols = st.columns(3); idx = 0
@@ -447,13 +419,18 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        # Solo dropdown, SIN botón X
                         opts = [pn, "[QUITAR / VACANTE]"] + sorted(res['b'])
                         np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
                         
                         if np != pn:
-                            if pn != "VACANTE": res['b'].append(pn)
-                            if np == "[QUITAR / VACANTE]": m['Nombre'] = "VACANTE"
+                            # 1. Devolver el actual a la banca (Si no es vacante)
+                            if pn != "VACANTE": 
+                                res['b'].append(pn)
+                                res['b'].sort() # Ordenar siempre
+                            
+                            # 2. Asignar el nuevo
+                            if np == "[QUITAR / VACANTE]":
+                                m['Nombre'] = "VACANTE"
                             else:
                                 if np in res['b']: res['b'].remove(np)
                                 m['Nombre'] = np
