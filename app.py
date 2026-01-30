@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V46", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V47", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -31,6 +31,9 @@ st.markdown("""
         div[data-testid="stDataEditor"] td { padding: 0px !important; line-height: 1.2 !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 38px !important; height: 38px !important; align-items: center; }
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; border-radius: 10px !important; }
+        
+        /* Botones pequeños de X */
+        div[data-testid="column"] .stButton button { height: 2.8rem !important; min-height: 2.8rem !important; }
     }
 
     .plan-card { background-color: #1E1E1E; border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
@@ -223,21 +226,19 @@ def get_img_bytes(evento, fecha, plan):
         curr_y += max(h1, h2) + P
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 7. REPORTE DE GESTIÓN (DETALLADO) ---
+# --- 7. REPORTE DE GESTIÓN ---
 def generate_config_pdf(event_name, staff_list, bars_data):
     if not FPDF: return None
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, f"INFORME DE GESTION: {event_name}", 0, 1, 'C'); pdf.ln(5)
     
-    # 1. BARRAS Y POTENCIAL
     for b in bars_data:
         pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"BARRA: {b['nombre'].upper()}", 1, 1, 'L', fill=True)
         pdf.set_font("Arial", "", 10)
         
-        # Filtramos quienes pueden ser que
         mat = pd.DataFrame(b['matriz_competencias'])
-        mat = mat[mat['Nombre'].isin(staff_list)] # Solo los convocados
+        mat = mat[mat['Nombre'].isin(staff_list)]
         
         encs = mat[mat['Es_Encargado']==True]['Nombre'].tolist()
         bars = mat[mat['Es_Bartender']==True]['Nombre'].tolist()
@@ -400,13 +401,11 @@ with t3:
                 st.rerun()
         
         c1, c2 = st.columns(2)
-        st.markdown('<div class="big-btn">', unsafe_allow_html=True)
         if FPDF: 
             pdf = get_pdf_bytes(res['e'], str(res['d']), res['p'])
             c1.download_button("📄 PDF", pdf, "p.pdf", "application/pdf", use_container_width=True, type="primary")
         img = get_img_bytes(res['e'], str(res['d']), res['p'])
         c2.download_button("📷 IMG", img, "p.png", "image/png", use_container_width=True, type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
         
         em = st.toggle("✏️ Edit")
         cols = st.columns(3); idx = 0
@@ -419,21 +418,27 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        opts = [pn, "[QUITAR / VACANTE]"] + sorted(res['b'])
-                        np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        # COLUMNA DOBLE: SELECTBOX + BOTON X
+                        c_sel, c_btn = st.columns([0.85, 0.15])
                         
-                        if np != pn:
-                            # 1. Devolver el actual a la banca (Si no es vacante)
-                            if pn != "VACANTE": 
-                                res['b'].append(pn)
-                                res['b'].sort() # Ordenar siempre
-                            
-                            # 2. Asignar el nuevo
-                            if np == "[QUITAR / VACANTE]":
+                        with c_sel:
+                            # Lista filtrada + Actual
+                            opts = [pn] + sorted(res['b'])
+                            np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        
+                        with c_btn:
+                            # BOTON X: Saca a la banca inmediatamente
+                            if st.button("✖️", key=f"x_{bn}_{i}", type="secondary", help="Enviar a Banca"):
+                                if pn != "VACANTE": 
+                                    res['b'].append(pn); res['b'].sort()
                                 m['Nombre'] = "VACANTE"
-                            else:
-                                if np in res['b']: res['b'].remove(np)
-                                m['Nombre'] = np
+                                st.rerun()
+
+                        # LOGICA SELECTBOX
+                        if np != pn:
+                            if pn != "VACANTE": res['b'].append(pn); res['b'].sort()
+                            if np != "VACANTE" and np in res['b']: res['b'].remove(np)
+                            m['Nombre'] = np
                             st.rerun()
                     else:
                         c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
