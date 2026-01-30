@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V50", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V49", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -50,27 +50,6 @@ st.markdown("""
     
     /* COLUMNAS FIJAS EDITOR */
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
-
-    /* --- NUEVO: RESALTE DEL MENÚ DESPLEGABLE (SELECTBOX) --- */
-    /* El input cerrado */
-    div[data-baseweb="select"] > div {
-        background-color: #2D2D2D !important;
-        border-color: #555 !important;
-    }
-    /* El menú desplegable (abierto) */
-    ul[data-baseweb="menu"] {
-        background-color: #383838 !important; /* Gris más claro para diferenciar */
-        border: 1px solid #FF4B4B !important; /* Borde rojo para destacar */
-    }
-    /* Opciones del menú */
-    li[data-baseweb="option"] {
-        color: white !important;
-    }
-    /* Opción seleccionada o hover */
-    li[aria-selected="true"], li[data-baseweb="option"]:hover {
-        background-color: #FF4B4B !important;
-        color: white !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -291,7 +270,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V50")
+st.title("🍸 Barra Staff V49")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -434,17 +413,23 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        # Solo dropdown, SIN botón X
-                        opts = [pn, "[QUITAR / VACANTE]"] + sorted(res['b'])
-                        np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        # Lista de opciones: VACANTE + Banca + Actual
+                        ops = ["VACANTE"] + sorted(res['b'])
+                        if pn not in ops and pn != "VACANTE": ops.append(pn)
+                        
+                        try: idx_sel = ops.index(pn)
+                        except: idx_sel = 0
+                        
+                        np = st.selectbox(f"{m['Icon']}", ops, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
                         
                         if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
 
+                        # LOGICA DE CAMBIO
                         if np != pn:
                             if pn != "VACANTE": 
                                 res['b'].append(pn); res['b'].sort()
                             
-                            if np == "[QUITAR / VACANTE]":
+                            if np == "VACANTE":
                                 m['Nombre'] = "VACANTE"
                             else:
                                 if np in res['b']: res['b'].remove(np)
