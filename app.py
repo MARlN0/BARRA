@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V47", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V48", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,25 +26,38 @@ st.markdown("""
 
     @media (max-width: 768px) {
         .block-container { padding-bottom: 6rem !important; padding-left: 0.2rem; padding-right: 0.2rem; }
+        
+        /* TABLAS COMPACTAS */
         div[data-testid="stDataEditor"] table { font-size: 12px !important; }
         div[data-testid="stDataEditor"] th { padding: 4px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px !important; line-height: 1.2 !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 38px !important; height: 38px !important; align-items: center; }
+        
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; border-radius: 10px !important; }
         
-        /* Botones pequeños de X */
-        div[data-testid="column"] .stButton button { height: 2.8rem !important; min-height: 2.8rem !important; }
+        /* AJUSTE BOTÓN X PEQUEÑO (ALINEADO) */
+        div[data-testid="column"] button[kind="secondary"] { 
+            height: 2.8rem !important; 
+            min-height: 2.8rem !important; 
+            padding: 0px 5px !important;
+            width: 100% !important;
+            border: 1px solid #444;
+        }
     }
 
     .plan-card { background-color: #1E1E1E; border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
     .barra-title { font-size: 1.1rem; font-weight: 800; color: #FFF; border-bottom: 2px solid #FF4B4B; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; }
+    
     .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    .ghost-text { font-size: 0.7rem; color: #AAA; font-style: italic; display: block; text-align: right; margin-top: 2px; }
+    
+    /* GHOST TEXT (HISTORIAL) */
+    .ghost-text { font-size: 0.7rem; color: #BBB; font-style: italic; display: block; margin-top: 2px; line-height: 1.1; }
+    
     .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
     
-    /* COLUMNAS FIJAS */
+    /* COLUMNAS FIJAS EDITOR */
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -226,29 +239,24 @@ def get_img_bytes(evento, fecha, plan):
         curr_y += max(h1, h2) + P
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 7. REPORTE DE GESTIÓN ---
+# --- 7. REPORTE GESTIÓN ---
 def generate_config_pdf(event_name, staff_list, bars_data):
     if not FPDF: return None
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
     pdf.cell(0, 10, f"INFORME DE GESTION: {event_name}", 0, 1, 'C'); pdf.ln(5)
-    
     for b in bars_data:
         pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"BARRA: {b['nombre'].upper()}", 1, 1, 'L', fill=True)
         pdf.set_font("Arial", "", 10)
-        
         mat = pd.DataFrame(b['matriz_competencias'])
         mat = mat[mat['Nombre'].isin(staff_list)]
-        
         encs = mat[mat['Es_Encargado']==True]['Nombre'].tolist()
         bars = mat[mat['Es_Bartender']==True]['Nombre'].tolist()
         ayus = mat[mat['Es_Ayudante']==True]['Nombre'].tolist()
-        
         pdf.multi_cell(0, 6, f"Posibles Encargados: {', '.join(encs)}", 1)
         pdf.multi_cell(0, 6, f"Posibles Bartenders: {', '.join(bars)}", 1)
         pdf.multi_cell(0, 6, f"Posibles Ayudantes: {', '.join(ayus)}", 1)
         pdf.ln(3)
-        
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 # --- 8. UTILS ---
@@ -258,7 +266,7 @@ def delete_confirm_ui(key, action, label):
         if st.button(f"🗑️ {label}", key=f"btn_{key}"): st.session_state[f"ds_{key}"] = True; st.rerun()
     else:
         st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
-        st.warning("¿Seguro? No hay vuelta atrás.")
+        st.warning("¿Seguro?")
         c1, c2 = st.columns(2)
         if c1.button("⚠️ SÍ, BORRAR", key=f"y_{key}", type="primary"): action(); st.session_state[f"ds_{key}"] = False; st.rerun()
         if c2.button("CANCELAR", key=f"n_{key}"): st.session_state[f"ds_{key}"] = False; st.rerun()
@@ -271,7 +279,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V46")
+st.title("🍸 Barra Staff V48")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -287,7 +295,6 @@ with t1:
     st.divider()
     df_rh = st.session_state.db_staff.copy()
     df_rh = ordenar_staff(df_rh); df_rh = agregar_indice(df_rh)
-    
     to_del = st.multiselect("Borrar Personal:", df_rh['Nombre'].tolist())
     if to_del:
         def del_rh_act(): st.session_state.db_staff = st.session_state.db_staff[~st.session_state.db_staff['Nombre'].isin(to_del)]; save_data()
@@ -312,7 +319,6 @@ with t2:
     st.write("#### 1. Plantilla")
     df_g = st.session_state.db_staff.copy(); df_g['OK'] = df_g['Nombre'].isin(evd['Staff_Convocado'])
     df_g = ordenar_staff(df_g); df_g = df_g[['OK', 'Nombre', 'Cargo_Default']]
-    
     ed = st.data_editor(
         agregar_indice(df_g), 
         column_config={"OK": st.column_config.CheckboxColumn("✅", width="small")},
@@ -348,23 +354,19 @@ with t2:
                 new_enc = c_meta_2.number_input("E", 0, 5, b['requerimientos']['enc'])
                 new_bar = c_meta_3.number_input("B", 0, 5, b['requerimientos']['bar'])
                 new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'])
-                
                 dfc = pd.DataFrame(b['matriz_competencias']); dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
                 m = pd.merge(dfr, dfc, on='Nombre', how='left')
                 m['Es_Encargado'].fillna(False, inplace=True); m['Es_Bartender'].fillna(m['Cargo_Default']=='BARTENDER', inplace=True); m['Es_Ayudante'].fillna(m['Cargo_Default']=='AYUDANTE', inplace=True)
-                
                 eb = st.data_editor(
                     agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
                     column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
                     use_container_width=True, hide_index=True, height=calc_altura(m)
                 )
-                
                 if st.form_submit_button("💾 Actualizar Datos"):
                     st.session_state.db_eventos[curr_ev]['Barras'][i]['nombre'] = new_name
                     st.session_state.db_eventos[curr_ev]['Barras'][i]['requerimientos'] = {'enc': new_enc, 'bar': new_bar, 'ayu': new_ayu}
                     st.session_state.db_eventos[curr_ev]['Barras'][i]['matriz_competencias'] = eb.drop('N°', axis=1).to_dict(orient='records')
                     save_data(); st.success("Guardado"); st.rerun()
-            
             st.divider()
             def del_bar_act(idx=i): st.session_state.db_eventos[curr_ev]['Barras'].pop(idx); save_data()
             delete_confirm_ui(f"del_b_{i}", lambda: del_bar_act(i), f"Eliminar Barra '{b['nombre']}'")
@@ -401,11 +403,13 @@ with t3:
                 st.rerun()
         
         c1, c2 = st.columns(2)
+        st.markdown('<div class="big-btn">', unsafe_allow_html=True)
         if FPDF: 
             pdf = get_pdf_bytes(res['e'], str(res['d']), res['p'])
             c1.download_button("📄 PDF", pdf, "p.pdf", "application/pdf", use_container_width=True, type="primary")
         img = get_img_bytes(res['e'], str(res['d']), res['p'])
         c2.download_button("📷 IMG", img, "p.png", "image/png", use_container_width=True, type="primary")
+        st.markdown('</div>', unsafe_allow_html=True)
         
         em = st.toggle("✏️ Edit")
         cols = st.columns(3); idx = 0
@@ -418,28 +422,42 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        # COLUMNA DOBLE: SELECTBOX + BOTON X
+                        # --- FIX LAYOUT: COLUMNAS PARA ALINEAR X ---
                         c_sel, c_btn = st.columns([0.85, 0.15])
-                        
                         with c_sel:
-                            # Lista filtrada + Actual
-                            opts = [pn] + sorted(res['b'])
-                            np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
-                        
+                            # Lista de opciones: VACANTE + Banca + Actual
+                            ops = ["VACANTE"] + sorted(res['b'])
+                            if pn not in ops and pn != "VACANTE": ops.append(pn)
+                            
+                            # Intentar seleccionar actual
+                            try: idx_sel = ops.index(pn)
+                            except: idx_sel = 0
+                            
+                            np = st.selectbox(f"{m['Icon']}", ops, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                            
+                            # Mostrar el historial justo debajo
+                            if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
+
                         with c_btn:
-                            # BOTON X: Saca a la banca inmediatamente
-                            if st.button("✖️", key=f"x_{bn}_{i}", type="secondary", help="Enviar a Banca"):
-                                if pn != "VACANTE": 
+                            # BOTÓN X AL COSTADO
+                            if st.button("✖️", key=f"x_{bn}_{i}", type="secondary"):
+                                if pn != "VACANTE":
                                     res['b'].append(pn); res['b'].sort()
                                 m['Nombre'] = "VACANTE"
                                 st.rerun()
 
-                        # LOGICA SELECTBOX
+                        # LOGICA DE CAMBIO EN SELECTBOX
                         if np != pn:
-                            if pn != "VACANTE": res['b'].append(pn); res['b'].sort()
-                            if np != "VACANTE" and np in res['b']: res['b'].remove(np)
-                            m['Nombre'] = np
+                            if pn != "VACANTE": 
+                                res['b'].append(pn); res['b'].sort()
+                            
+                            if np == "VACANTE":
+                                m['Nombre'] = "VACANTE"
+                            else:
+                                if np in res['b']: res['b'].remove(np)
+                                m['Nombre'] = np
                             st.rerun()
+                            
                     else:
                         c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
                         st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
