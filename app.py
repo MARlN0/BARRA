@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL (NO SCROLL INTERNO) ---
-st.set_page_config(page_title="Barra Staff V41", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V42", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -87,8 +87,7 @@ def load_data():
                 return df, evs, d.get('logs', [])
         except: pass
     
-    # --- AQUÍ ESTÁN TUS 18 NOMBRES ORIGINALES ---
-    # Se cargarán automáticamente si no hay datos previos
+    # 18 NOMBRES ORIGINALES
     default_staff = pd.DataFrame({
         'Nombre': [
             'Forest', 'Gerald', 'Guillermo', 'Jair', 'Kers', 'Kevin', 
@@ -108,7 +107,13 @@ def save_data():
     for k, v in st.session_state.db_eventos.items():
         bs = []
         for b in v['Barras']:
-            bc = b.copy(); bc['matriz_competencias'] = b['matriz_competencias'].to_dict(orient='records'); bs.append(bc)
+            bc = b.copy()
+            # CORRECCIÓN DE BUG: Verificar si es DataFrame o Lista antes de convertir
+            if isinstance(b['matriz_competencias'], pd.DataFrame):
+                bc['matriz_competencias'] = b['matriz_competencias'].to_dict(orient='records')
+            else:
+                bc['matriz_competencias'] = b['matriz_competencias']
+            bs.append(bc)
         ev[k] = {'Staff_Convocado': v['Staff_Convocado'], 'Barras': bs}
     with open(DB_FILE, 'w') as f: json.dump({'staff': s, 'eventos': ev, 'logs': st.session_state.db_logs}, f, indent=4)
 
@@ -145,6 +150,11 @@ def run_allocation(event_name):
     for barra in ed['Barras']:
         bn = clean_str(barra['nombre'])
         req = barra['requerimientos']; mat = barra['matriz_competencias']
+        
+        # Verificar si mat es DataFrame (por si acaso la recarga no fue completa)
+        if not isinstance(mat, pd.DataFrame):
+            mat = pd.DataFrame(mat)
+            
         mat = mat[mat['Nombre'].isin(active)] 
         team = []
         
@@ -236,7 +246,7 @@ def ordenar_staff(df): return df.sort_values(by=['Cargo_Default', 'Nombre'], asc
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 8. UI ---
-st.title("🍸 Barra Staff V41")
+st.title("🍸 Barra Staff V42")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
