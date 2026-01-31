@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V49", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V51", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -50,6 +50,21 @@ st.markdown("""
     
     /* COLUMNAS FIJAS EDITOR */
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
+
+    /* --- RESALTE DEL MENÚ DESPLEGABLE (SELECTBOX) --- */
+    div[data-baseweb="select"] > div {
+        background-color: #2D2D2D !important;
+        border-color: #555 !important;
+    }
+    ul[data-baseweb="menu"] {
+        background-color: #383838 !important; /* Gris claro */
+        border: 1px solid #FF4B4B !important; /* Borde rojo */
+    }
+    li[data-baseweb="option"] { color: white !important; }
+    li[aria-selected="true"], li[data-baseweb="option"]:hover {
+        background-color: #FF4B4B !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -103,7 +118,11 @@ def save_data():
             else: bc['matriz_competencias'] = b['matriz_competencias']
             bs.append(bc)
         ev[k] = {'Staff_Convocado': v['Staff_Convocado'], 'Barras': bs}
-    with open(DB_FILE, 'w') as f: json.dump({'staff': s, 'eventos': ev, 'logs': st.session_state.db_logs}, f, indent=4)
+    
+    # Preparamos el JSON completo
+    full_data = {'staff': s, 'eventos': ev, 'logs': st.session_state.db_logs}
+    with open(DB_FILE, 'w') as f: json.dump(full_data, f, indent=4)
+    return json.dumps(full_data, indent=4) # Retornamos string para descargar
 
 if 'db_staff' not in st.session_state:
     s, e, l = load_data()
@@ -257,7 +276,7 @@ def delete_confirm_ui(key, action, label):
         if st.button(f"🗑️ {label}", key=f"btn_{key}"): st.session_state[f"ds_{key}"] = True; st.rerun()
     else:
         st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
-        st.warning("¿Seguro? No hay vuelta atrás.")
+        st.warning("¿Seguro?")
         c1, c2 = st.columns(2)
         if c1.button("⚠️ SÍ, BORRAR", key=f"y_{key}", type="primary"): action(); st.session_state[f"ds_{key}"] = False; st.rerun()
         if c2.button("CANCELAR", key=f"n_{key}"): st.session_state[f"ds_{key}"] = False; st.rerun()
@@ -270,7 +289,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff ")
+st.title("🍸 Barra Staff V51")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -370,6 +389,35 @@ with t2:
             b64 = base64.b64encode(pdf_conf).decode()
             href = f'<a href="data:application/octet-stream;base64,{b64}" download="Gestion_{curr_ev}.pdf">CLICK AQUÍ PARA DESCARGAR</a>'
             st.markdown(href, unsafe_allow_html=True)
+            
+    # --- SISTEMA DE RESPALDO (NUEVO) ---
+    st.markdown("---")
+    st.write("#### 📂 Respaldo y Restauración")
+    st.info("Usa esto para no perder datos si reinicias.")
+    
+    # Botón Descargar
+    json_str = save_data()
+    st.download_button(
+        label="💾 Descargar Copia de Seguridad",
+        data=json_str,
+        file_name="copia_seguridad.json",
+        mime="application/json",
+        type="primary"
+    )
+    
+    # Botón Subir
+    uploaded_file = st.file_uploader("Restaurar copia:", type=['json'])
+    if uploaded_file is not None:
+        try:
+            data = json.load(uploaded_file)
+            st.session_state.db_staff = pd.DataFrame(data['staff'])
+            st.session_state.db_eventos = data['eventos']
+            st.session_state.db_logs = data.get('logs', [])
+            save_data()
+            st.success("¡Datos restaurados con éxito!")
+            st.rerun()
+        except:
+            st.error("Archivo inválido")
 
 with t3:
     c1, c2 = st.columns(2); od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", list(st.session_state.db_eventos.keys()), key="oe")
@@ -424,7 +472,6 @@ with t3:
                         
                         if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
 
-                        # LOGICA DE CAMBIO
                         if np != pn:
                             if pn != "VACANTE": 
                                 res['b'].append(pn); res['b'].sort()
@@ -469,4 +516,3 @@ with t4:
                             st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div class='name-text' style='color:{c}'>{m['Nombre']}</div></div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
                     idx+=1
-
