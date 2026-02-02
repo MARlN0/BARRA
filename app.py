@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import random
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import json
 import os
 import base64
@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V51", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V52", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -26,45 +26,27 @@ st.markdown("""
 
     @media (max-width: 768px) {
         .block-container { padding-bottom: 6rem !important; padding-left: 0.2rem; padding-right: 0.2rem; }
-        
-        /* TABLAS COMPACTAS */
         div[data-testid="stDataEditor"] table { font-size: 12px !important; }
         div[data-testid="stDataEditor"] th { padding: 4px !important; text-align: center !important; }
         div[data-testid="stDataEditor"] td { padding: 0px !important; line-height: 1.2 !important; }
         div[data-testid="stDataEditor"] div[role="gridcell"] { min-height: 38px !important; height: 38px !important; align-items: center; }
-        
         .stButton button { width: 100% !important; height: 3.5rem !important; font-weight: bold !important; border-radius: 10px !important; }
     }
 
     .plan-card { background-color: #1E1E1E; border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
     .barra-title { font-size: 1.1rem; font-weight: 800; color: #FFF; border-bottom: 2px solid #FF4B4B; padding-bottom: 5px; margin-bottom: 8px; text-transform: uppercase; }
-    
     .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    
-    /* GHOST TEXT (HISTORIAL) */
     .ghost-text { font-size: 0.7rem; color: #BBB; font-style: italic; display: block; margin-top: 2px; line-height: 1.1; }
-    
     .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
-    
-    /* COLUMNAS FIJAS EDITOR */
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
 
-    /* --- RESALTE DEL MENÚ DESPLEGABLE (SELECTBOX) --- */
-    div[data-baseweb="select"] > div {
-        background-color: #2D2D2D !important;
-        border-color: #555 !important;
-    }
-    ul[data-baseweb="menu"] {
-        background-color: #383838 !important; /* Gris claro */
-        border: 1px solid #FF4B4B !important; /* Borde rojo */
-    }
+    /* ESTILO SELECTBOX */
+    div[data-baseweb="select"] > div { background-color: #2D2D2D !important; border-color: #555 !important; }
+    ul[data-baseweb="menu"] { background-color: #383838 !important; border: 1px solid #FF4B4B !important; }
     li[data-baseweb="option"] { color: white !important; }
-    li[aria-selected="true"], li[data-baseweb="option"]:hover {
-        background-color: #FF4B4B !important;
-        color: white !important;
-    }
+    li[aria-selected="true"], li[data-baseweb="option"]:hover { background-color: #FF4B4B !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -118,33 +100,15 @@ def save_data():
             else: bc['matriz_competencias'] = b['matriz_competencias']
             bs.append(bc)
         ev[k] = {'Staff_Convocado': v['Staff_Convocado'], 'Barras': bs}
-    
-    # Preparamos el JSON completo
     full_data = {'staff': s, 'eventos': ev, 'logs': st.session_state.db_logs}
     with open(DB_FILE, 'w') as f: json.dump(full_data, f, indent=4)
-    return json.dumps(full_data, indent=4) # Retornamos string para descargar
+    return json.dumps(full_data, indent=4)
 
 if 'db_staff' not in st.session_state:
     s, e, l = load_data()
     st.session_state.db_staff = s; st.session_state.db_eventos = e; st.session_state.db_logs = l
 
-# --- 4. HISTORIAL ---
-def get_forbidden_map(event_name):
-    forbidden = {}
-    last_log = None
-    for log in reversed(st.session_state.db_logs):
-        if log['Evento'] == event_name: last_log = log; break     
-    if last_log:
-        for bar_name, team in last_log['Plan'].items():
-            for member in team:
-                p_name = clean_str(member['Nombre'])
-                if p_name != "VACANTE" and not member.get('IsSupport', False):
-                    forbidden[p_name] = clean_str(bar_name)
-        try: d_str = datetime.strptime(last_log['Fecha'], '%Y-%m-%d').strftime('%d/%m')
-        except: d_str = last_log['Fecha']
-        return forbidden, d_str, last_log['Plan']
-    return {}, "", {}
-
+# --- 4. HISTORIAL INTELIGENTE ---
 def get_detailed_history(person_name, event_name):
     for log in reversed(st.session_state.db_logs):
         if log['Evento'] == event_name:
@@ -158,10 +122,67 @@ def get_detailed_history(person_name, event_name):
             return ""
     return ""
 
-# --- 5. ALGORITMO ---
-def run_allocation(event_name):
+def calculate_rotation_scores(event_name):
+    """
+    Analiza TODO el historial para calcular hace cuánto no va una persona a una barra.
+    Retorna: { 'NombrePersona': { 'NombreBarra': Dias_Desde_Ultima_Vez } }
+    """
+    scores = {} # Score alto = Hace mucho no va (Prioridad)
+    
+    # Inicializar con un valor alto (nunca ha ido)
+    all_bars = set()
+    if event_name in st.session_state.db_eventos:
+        for b in st.session_state.db_eventos[event_name]['Barras']:
+            all_bars.add(clean_str(b['nombre']))
+            
+    for p in st.session_state.db_staff['Nombre']:
+        scores[clean_str(p)] = {b: 1000 for b in all_bars} # 1000 = Nunca
+
+    # Recorrer historial (del más reciente al más antiguo)
+    # Valor reciente = 0 (Acaba de ir). Valor antiguo = Alto.
+    
+    visit_count = 0
+    for log in reversed(st.session_state.db_logs):
+        if log['Evento'] == event_name:
+            visit_count += 1
+            for bar_name, team in log['Plan'].items():
+                b_clean = clean_str(bar_name)
+                for member in team:
+                    p_clean = clean_str(member['Nombre'])
+                    if p_clean in scores and b_clean in scores[p_clean]:
+                        # Si es la primera vez que lo encontramos (yendo hacia atrás), es su visita más reciente
+                        if scores[p_clean][b_clean] == 1000:
+                            scores[p_clean][b_clean] = visit_count # 1 = ultima vez, 2 = penultima...
+    
+    return scores
+
+# --- 5. ALGORITMO DE ROTACIÓN ÓPTIMA ---
+def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
     ed = st.session_state.db_eventos[event_name]
-    forbidden_map, _, _ = get_forbidden_map(event_name)
+    
+    # Si estamos simulando, usamos logs temporales, si no, los reales
+    logs_source = simulated_logs if simulation_mode else st.session_state.db_logs
+    
+    # 1. Calcular Scores de Rotación (LRU - Least Recently Used)
+    # Necesitamos reconstruir los scores basados en los logs proporcionados
+    # (Copie lógica de calculate_rotation_scores adaptada a logs dinámicos)
+    rotation_scores = {}
+    all_bars = set(clean_str(b['nombre']) for b in ed['Barras'])
+    for p in ed['Staff_Convocado']:
+        rotation_scores[clean_str(p)] = {b: 1000 for b in all_bars}
+        
+    visit_idx = 0
+    for log in reversed(logs_source):
+        if log['Evento'] == event_name:
+            visit_idx += 1
+            for bn, tm in log['Plan'].items():
+                bc = clean_str(bn)
+                for m in tm:
+                    pc = clean_str(m['Nombre'])
+                    if pc in rotation_scores and bc in rotation_scores[pc]:
+                        if rotation_scores[pc][bc] == 1000:
+                            rotation_scores[pc][bc] = visit_idx
+
     active = set(ed['Staff_Convocado']); allo = {}; assigned = set()
     
     for barra in ed['Barras']:
@@ -171,16 +192,35 @@ def run_allocation(event_name):
         team = []
         
         def pick(role_l, role_i, check_col):
+            # Candidatos base
             cands = mat[(mat[check_col]==True) & (~mat['Nombre'].isin(assigned))]
             valid_candidates = []
+            
+            # Lista de candidatos con sus puntajes para esta barra
+            scored_candidates = [] 
+            
             for _, r in cands.iterrows():
                 p = r['Nombre']; p_clean = clean_str(p)
-                if forbidden_map.get(p_clean) == bn: continue 
-                valid_candidates.append(p)
+                
+                # REGLA 1: BLOQUEO INMEDIATO (Si estuvo la vez pasada = Score 1)
+                last_visit = rotation_scores.get(p_clean, {}).get(bn, 1000)
+                
+                if last_visit == 1: 
+                    continue # Estuvo la fecha anterior -> DESCARTAR
+                
+                # Guardamos candidato y su puntaje (mientras mas alto, mejor)
+                scored_candidates.append((p, last_visit))
             
-            if valid_candidates:
-                ch = random.choice(valid_candidates); assigned.add(ch)
-                team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': ch, 'IsSupport': False})
+            if scored_candidates:
+                # REGLA 2: ELEGIR EL QUE HACE MÁS TIEMPO NO VIENE
+                # Ordenar por puntaje descendente (1000 primero, luego 5, 4...)
+                # Si hay empate, mezclar para aleatoriedad
+                random.shuffle(scored_candidates) # Mezclar primero para romper empates al azar
+                scored_candidates.sort(key=lambda x: x[1], reverse=True)
+                
+                chosen = scored_candidates[0][0] # El mejor candidato
+                assigned.add(chosen)
+                team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': chosen, 'IsSupport': False})
             else:
                 team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': 'VACANTE', 'IsSupport': False})
 
@@ -289,7 +329,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V51")
+st.title("🍸 Barra Staff V52")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -390,22 +430,11 @@ with t2:
             href = f'<a href="data:application/octet-stream;base64,{b64}" download="Gestion_{curr_ev}.pdf">CLICK AQUÍ PARA DESCARGAR</a>'
             st.markdown(href, unsafe_allow_html=True)
             
-    # --- SISTEMA DE RESPALDO (NUEVO) ---
     st.markdown("---")
     st.write("#### 📂 Respaldo y Restauración")
     st.info("Usa esto para no perder datos si reinicias.")
-    
-    # Botón Descargar
     json_str = save_data()
-    st.download_button(
-        label="💾 Descargar Copia de Seguridad",
-        data=json_str,
-        file_name="copia_seguridad.json",
-        mime="application/json",
-        type="primary"
-    )
-    
-    # Botón Subir
+    st.download_button("💾 Descargar Copia de Seguridad", json_str, "copia_seguridad.json", "application/json", type="primary")
     uploaded_file = st.file_uploader("Restaurar copia:", type=['json'])
     if uploaded_file is not None:
         try:
@@ -413,24 +442,48 @@ with t2:
             st.session_state.db_staff = pd.DataFrame(data['staff'])
             st.session_state.db_eventos = data['eventos']
             st.session_state.db_logs = data.get('logs', [])
-            save_data()
-            st.success("¡Datos restaurados con éxito!")
-            st.rerun()
-        except:
-            st.error("Archivo inválido")
+            save_data(); st.success("Restaurado"); st.rerun()
+        except: st.error("Archivo inválido")
 
 with t3:
     c1, c2 = st.columns(2); od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", list(st.session_state.db_eventos.keys()), key="oe")
     
     st.markdown('<div class="big-btn">', unsafe_allow_html=True)
-    if st.button("🚀 GENERAR", type="primary"):
+    if st.button("🚀 GENERAR TURNO (ROTACIÓN INTELIGENTE)", type="primary"):
         p, b = run_allocation(oe)
         st.session_state.temp = {'p': p, 'b': b, 'e': oe, 'd': od}
     st.markdown('</div>', unsafe_allow_html=True)
     
+    # --- SIMULACIÓN (NUEVO) ---
+    with st.expander("🔮 Simular Próximas 5 Fechas (Plan de Rotación)"):
+        if st.button("Correr Simulación"):
+            # Crear una copia temporal de logs para simular
+            temp_logs_sim = list(st.session_state.db_logs)
+            st.write("### Plan Sugerido:")
+            
+            for i in range(1, 6):
+                # Simular fecha futura
+                future_date = od + timedelta(days=i)
+                # Ejecutar algoritmo con memoria temporal
+                sim_plan, _ = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs_sim)
+                
+                st.markdown(f"**Fecha {i} ({future_date.strftime('%d/%m')}):**")
+                
+                # Crear mini tabla visual
+                cols_sim = st.columns(3)
+                idx_s = 0
+                for bn, tm in sim_plan.items():
+                    with cols_sim[idx_s % 3]:
+                        enc_names = [m['Nombre'] for m in tm if 'Encargado' in m['Rol']]
+                        st.caption(f"{bn}: {', '.join(enc_names)}")
+                    idx_s += 1
+                
+                # Agregar este resultado a los logs temporales para que la siguiente iteración lo considere
+                temp_logs_sim.append({'Fecha': str(future_date), 'Evento': oe, 'Plan': sim_plan})
+                st.divider()
+
     if 'temp' in st.session_state and st.session_state.temp['e'] == oe:
         res = st.session_state.temp
-        _, _, prev_plan_complete = get_forbidden_map(oe)
         
         if res['b']: st.warning(f"⚠️ Banca: {', '.join(res['b'])}")
         else: st.success("✅ Full")
@@ -461,23 +514,14 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        # Lista de opciones: VACANTE + Banca + Actual
-                        ops = ["VACANTE"] + sorted(res['b'])
-                        if pn not in ops and pn != "VACANTE": ops.append(pn)
-                        
-                        try: idx_sel = ops.index(pn)
-                        except: idx_sel = 0
-                        
-                        np = st.selectbox(f"{m['Icon']}", ops, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        opts = [pn, "[QUITAR / VACANTE]"] + sorted(res['b'])
+                        np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
                         
                         if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
 
                         if np != pn:
-                            if pn != "VACANTE": 
-                                res['b'].append(pn); res['b'].sort()
-                            
-                            if np == "VACANTE":
-                                m['Nombre'] = "VACANTE"
+                            if pn != "VACANTE": res['b'].append(pn); res['b'].sort()
+                            if np == "[QUITAR / VACANTE]": m['Nombre'] = "VACANTE"
                             else:
                                 if np in res['b']: res['b'].remove(np)
                                 m['Nombre'] = np
