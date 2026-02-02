@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V53", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V54", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -142,7 +142,7 @@ def calculate_rotation_scores(event_name):
                     p_clean = clean_str(member['Nombre'])
                     if p_clean in scores and b_clean in scores[p_clean]:
                         if scores[p_clean][b_clean] == 1000:
-                            scores[p_clean][b_clean] = visit_count 
+                            scores[p_clean][b_clean] = visit_idx 
     return scores
 
 # --- 5. ALGORITMO DE ROTACIÓN ÓPTIMA ---
@@ -300,7 +300,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V53")
+st.title("🍸 Barra Staff V54")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -425,24 +425,68 @@ with t3:
         st.session_state.temp = {'p': p, 'b': b, 'e': oe, 'd': od}
     st.markdown('</div>', unsafe_allow_html=True)
     
+    # --- SIMULACIÓN (EDITABLE) ---
     with st.expander("🔮 Simular Próximas 5 Fechas (Plan de Rotación)"):
-        if st.button("Correr Simulación"):
-            temp_logs_sim = list(st.session_state.db_logs)
-            st.write("### Plan Sugerido:")
+        # Botón para (Re)Generar Simulación
+        if st.button("🔄 Generar / Reiniciar Simulación"):
+            temp_logs = list(st.session_state.db_logs)
+            sim_results = []
+            
             for i in range(1, 6):
-                future_date = od + timedelta(days=i)
-                sim_plan, _ = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs_sim)
-                st.markdown(f"**Fecha {i} ({future_date.strftime('%d/%m')}):**")
-                cols_sim = st.columns(3); idx_s = 0
-                for bn, tm in sim_plan.items():
-                    with cols_sim[idx_s % 3]:
-                        st.markdown(f"**{bn}**")
-                        for m in tm:
-                            if m['Nombre'] != "VACANTE":
-                                st.caption(f"{m['Icon']} {m['Nombre']}")
-                    idx_s += 1
-                temp_logs_sim.append({'Fecha': str(future_date), 'Evento': oe, 'Plan': sim_plan})
-                st.divider()
+                f_date = od + timedelta(days=i)
+                # Ejecutar algoritmo con memoria acumulada
+                p_sim, b_sim = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs)
+                
+                # Guardar resultado del día
+                sim_results.append({
+                    'id': i,
+                    'date_label': f_date.strftime('%d/%m'),
+                    'plan': p_sim,
+                    'banca': b_sim
+                })
+                # Agregar al historial temporal para que el siguiente día no repita
+                temp_logs.append({'Fecha': str(f_date), 'Evento': oe, 'Plan': p_sim})
+            
+            st.session_state['sim_data'] = sim_results
+            st.rerun()
+
+        # Renderizar Simulación Interactiva
+        if 'sim_data' in st.session_state:
+            for day in st.session_state['sim_data']:
+                st.markdown(f"### 📅 Fecha {day['id']} ({day['date_label']})")
+                
+                # Mostrar Banca
+                if day['banca']:
+                    st.info(f"**Banca:** {', '.join(sorted(day['banca']))}")
+                else:
+                    st.success("Banca Vacía")
+
+                # Mostrar Barras Editables
+                cols = st.columns(3)
+                idx = 0
+                for bn, tm in day['plan'].items():
+                    with cols[idx % 3]:
+                        st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
+                        for i, m in enumerate(tm):
+                            pn = m['Nombre']
+                            
+                            # Selector único para simulación
+                            sim_key = f"sim_{day['id']}_{bn}_{i}"
+                            opts = [pn, "[QUITAR / VACANTE]"] + sorted(day['banca'])
+                            
+                            np = st.selectbox(f"{m['Icon']} {m['Rol']}", opts, key=sim_key, label_visibility="collapsed")
+                            
+                            # Lógica de cambio en simulación
+                            if np != pn:
+                                if pn != "VACANTE": day['banca'].append(pn)
+                                if np == "[QUITAR / VACANTE]": m['Nombre'] = "VACANTE"
+                                else:
+                                    if np in day['banca']: day['banca'].remove(np)
+                                    m['Nombre'] = np
+                                st.rerun()
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    idx += 1
+                st.markdown("---")
 
     if 'temp' in st.session_state and st.session_state.temp['e'] == oe:
         res = st.session_state.temp
