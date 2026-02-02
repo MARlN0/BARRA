@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V56", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V57", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -38,7 +38,7 @@ st.markdown("""
     .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    .ghost-text { font-size: 0.7rem; color: #AAA; font-style: italic; display: block; text-align: right; margin-top: 2px; }
+    .ghost-text { font-size: 0.7rem; color: #BBB; font-style: italic; display: block; text-align: right; margin-top: 2px; }
     .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
 
@@ -238,6 +238,49 @@ def get_pdf_bytes(evento, fecha, plan):
         pdf.set_y(yst + max(h1, h2) + 5)
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
+def get_simulation_pdf_bytes(event_name, sim_data):
+    if not FPDF: return None
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    for day in sim_data:
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, f"SIMULACION: {event_name} | {day['date_label']}", 0, 1, 'L')
+        pdf.ln(5)
+        
+        # Banca
+        if day['banca']:
+            pdf.set_font("Arial", "I", 10); pdf.set_text_color(200, 0, 0)
+            pdf.multi_cell(0, 8, f"Banca: {', '.join(sorted(day['banca']))}")
+            pdf.set_text_color(0, 0, 0); pdf.ln(5)
+            
+        plan = day['plan']
+        sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
+        col_w = 90; xl = 10; xr = 110
+        
+        for i in range(0, len(sb), 2):
+            yst = pdf.get_y()
+            b1, t1 = sb[i]
+            pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
+            pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+            for m in t1:
+                r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
+                pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
+            h1 = pdf.get_y() - yst
+            h2 = 0
+            if i+1 < len(sb):
+                b2, t2 = sb[i+1]
+                pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
+                pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+                for m in t2:
+                    r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
+                    pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
+                h2 = pdf.get_y() - yst
+            pdf.set_y(yst + max(h1, h2) + 5)
+            
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
 def get_img_bytes(evento, fecha, plan):
     try: font_t = ImageFont.truetype("arialbd.ttf", 24); font_b = ImageFont.truetype("arialbd.ttf", 14); font_r = ImageFont.truetype("arial.ttf", 14)
     except: font_t = font_b = font_r = ImageFont.load_default()
@@ -308,7 +351,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V56")
+st.title("🍸 Barra Staff V57")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -433,13 +476,15 @@ with t3:
         st.session_state.temp = {'p': p, 'b': b, 'e': oe, 'd': od}
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # --- SIMULACIÓN (MEJORADA) ---
-    with st.expander("🔮 Simular Próximas 5 Fechas (Plan de Rotación)"):
+    # --- SIMULACIÓN ---
+    with st.expander("🔮 Simular Plan de Rotación"):
+        days_to_sim = st.number_input("Cantidad de fechas a simular:", min_value=1, max_value=30, value=5)
+        
         if st.button("🔄 Generar / Reiniciar Simulación"):
             temp_logs = list(st.session_state.db_logs)
             sim_results = []
             
-            for i in range(1, 6):
+            for i in range(1, days_to_sim + 1):
                 f_date = od + timedelta(days=i)
                 p_sim, b_sim = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs)
                 sim_results.append({'id': i, 'date_label': f_date.strftime('%d/%m'), 'plan': p_sim, 'banca': b_sim})
@@ -448,14 +493,22 @@ with t3:
             st.rerun()
 
         if 'sim_data' in st.session_state:
+            # BOTÓN EXPORTAR PDF
+            if st.button("📄 Exportar Plan Completo (PDF)", use_container_width=True):
+                if FPDF:
+                    pdf_sim = get_simulation_pdf_bytes(oe, st.session_state['sim_data'])
+                    b64 = base64.b64encode(pdf_sim).decode()
+                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="Plan_Simulado_{oe}.pdf">CLICK AQUÍ PARA DESCARGAR PLAN</a>'
+                    st.markdown(href, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
             for i_sim, day in enumerate(st.session_state['sim_data']):
                 st.markdown(f"### 📅 Fecha {day['id']} ({day['date_label']})")
                 
-                # BANCA SIMULADA
                 if day['banca']: st.warning(f"⚠️ Banca: {', '.join(sorted(day['banca']))}")
                 else: st.success("✅ Full")
                 
-                # MODO EDICIÓN SIMULADO
                 sim_edit_mode = st.toggle(f"✏️ Editar Día {day['id']}", key=f"tgl_sim_{day['id']}")
                 
                 cols = st.columns(3); idx = 0
@@ -464,8 +517,6 @@ with t3:
                         st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                         for k, m in enumerate(tm):
                             pn = m['Nombre']
-                            
-                            # GHOST DINÁMICO (CASCADA)
                             ghost = ""
                             if i_sim == 0:
                                 if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
@@ -481,8 +532,9 @@ with t3:
                                 except: sel_idx = 0
                                 
                                 np = st.selectbox(f"{m['Icon']} {m['Rol']}", opts, index=sel_idx, key=f"sim_{day['id']}_{bn}_{k}", label_visibility="collapsed")
-                                if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
                                 
+                                if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
+
                                 if np != pn:
                                     if pn != "VACANTE": day['banca'].append(pn)
                                     if np == "VACANTE": m['Nombre'] = "VACANTE"
