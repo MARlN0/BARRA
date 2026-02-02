@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V55", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V56", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -38,7 +38,7 @@ st.markdown("""
     .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    .ghost-text { font-size: 0.7rem; color: #BBB; font-style: italic; display: block; margin-top: 2px; line-height: 1.1; }
+    .ghost-text { font-size: 0.7rem; color: #AAA; font-style: italic; display: block; text-align: right; margin-top: 2px; }
     .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
 
@@ -110,7 +110,6 @@ if 'db_staff' not in st.session_state:
 
 # --- 4. HISTORIAL INTELIGENTE ---
 def get_detailed_history(person_name, event_name):
-    # Mira el historial REAL (DB)
     for log in reversed(st.session_state.db_logs):
         if log['Evento'] == event_name:
             for bar_name, team in log['Plan'].items():
@@ -124,12 +123,9 @@ def get_detailed_history(person_name, event_name):
     return ""
 
 def get_simulated_history(person_name, previous_sim_day_data):
-    # Mira el historial SIMULADO (El día anterior del loop)
     if not previous_sim_day_data: return ""
-    
     prev_plan = previous_sim_day_data['plan']
     prev_date_label = previous_sim_day_data['date_label']
-    
     for bar_name, team in prev_plan.items():
         for member in team:
             if clean_str(member['Nombre']) == clean_str(person_name):
@@ -143,10 +139,8 @@ def calculate_rotation_scores(event_name):
     if event_name in st.session_state.db_eventos:
         for b in st.session_state.db_eventos[event_name]['Barras']:
             all_bars.add(clean_str(b['nombre']))
-            
     for p in st.session_state.db_staff['Nombre']:
         scores[clean_str(p)] = {b: 1000 for b in all_bars}
-
     visit_count = 0
     for log in reversed(st.session_state.db_logs):
         if log['Evento'] == event_name:
@@ -160,12 +154,11 @@ def calculate_rotation_scores(event_name):
                             scores[p_clean][b_clean] = visit_count 
     return scores
 
-# --- 5. ALGORITMO DE ROTACIÓN ÓPTIMA ---
+# --- 5. ALGORITMO DE ROTACIÓN ---
 def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
     ed = st.session_state.db_eventos[event_name]
     logs_source = simulated_logs if simulation_mode else st.session_state.db_logs
     
-    # Reconstruir scores basado en los logs que le pasemos (reales o simulados)
     rotation_scores = {}
     all_bars = set(clean_str(b['nombre']) for b in ed['Barras'])
     for p in ed['Staff_Convocado']:
@@ -195,11 +188,10 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
             cands = mat[(mat[check_col]==True) & (~mat['Nombre'].isin(assigned))]
             valid_candidates = []
             scored_candidates = [] 
-            
             for _, r in cands.iterrows():
                 p = r['Nombre']; p_clean = clean_str(p)
                 last_visit = rotation_scores.get(p_clean, {}).get(bn, 1000)
-                if last_visit == 1: continue # Estuvo ayer -> Bloqueado
+                if last_visit == 1: continue 
                 scored_candidates.append((p, last_visit))
             
             if scored_candidates:
@@ -316,7 +308,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V55")
+st.title("🍸 Barra Staff V56")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -441,7 +433,7 @@ with t3:
         st.session_state.temp = {'p': p, 'b': b, 'e': oe, 'd': od}
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # --- SIMULACIÓN (NUEVO DISEÑO) ---
+    # --- SIMULACIÓN (MEJORADA) ---
     with st.expander("🔮 Simular Próximas 5 Fechas (Plan de Rotación)"):
         if st.button("🔄 Generar / Reiniciar Simulación"):
             temp_logs = list(st.session_state.db_logs)
@@ -450,15 +442,8 @@ with t3:
             for i in range(1, 6):
                 f_date = od + timedelta(days=i)
                 p_sim, b_sim = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs)
-                
-                sim_results.append({
-                    'id': i,
-                    'date_label': f_date.strftime('%d/%m'),
-                    'plan': p_sim,
-                    'banca': b_sim
-                })
+                sim_results.append({'id': i, 'date_label': f_date.strftime('%d/%m'), 'plan': p_sim, 'banca': b_sim})
                 temp_logs.append({'Fecha': str(f_date), 'Evento': oe, 'Plan': p_sim})
-            
             st.session_state['sim_data'] = sim_results
             st.rerun()
 
@@ -466,48 +451,48 @@ with t3:
             for i_sim, day in enumerate(st.session_state['sim_data']):
                 st.markdown(f"### 📅 Fecha {day['id']} ({day['date_label']})")
                 
-                # BANCA EN SIMULACIÓN
+                # BANCA SIMULADA
                 if day['banca']: st.warning(f"⚠️ Banca: {', '.join(sorted(day['banca']))}")
                 else: st.success("✅ Full")
-
-                cols = st.columns(3)
-                idx = 0
+                
+                # MODO EDICIÓN SIMULADO
+                sim_edit_mode = st.toggle(f"✏️ Editar Día {day['id']}", key=f"tgl_sim_{day['id']}")
+                
+                cols = st.columns(3); idx = 0
                 for bn, tm in day['plan'].items():
                     with cols[idx % 3]:
                         st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                         for k, m in enumerate(tm):
                             pn = m['Nombre']
                             
-                            # GHOST TEXT DINAMICO PARA SIMULACIÓN
+                            # GHOST DINÁMICO (CASCADA)
                             ghost = ""
                             if i_sim == 0:
-                                # Día 1: Mira datos reales
                                 if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                             else:
-                                # Día 2+: Mira el día simulado anterior
                                 prev_day_data = st.session_state['sim_data'][i_sim - 1]
                                 if pn != "VACANTE": ghost = get_simulated_history(pn, prev_day_data)
 
-                            # SELECTOR SIMULADO
-                            sim_key = f"sim_{day['id']}_{bn}_{k}"
-                            opts = [pn, "[QUITAR / VACANTE]"] + sorted(day['banca'])
-                            
-                            # Intentar seleccionar el actual
-                            try: sel_idx = opts.index(pn)
-                            except: sel_idx = 0
-                            
-                            np = st.selectbox(f"{m['Icon']} {m['Rol']}", opts, index=sel_idx, key=sim_key, label_visibility="collapsed")
-                            
-                            if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
-
-                            # Lógica Cambio Simulado
-                            if np != pn:
-                                if pn != "VACANTE": day['banca'].append(pn)
-                                if np == "[QUITAR / VACANTE]": m['Nombre'] = "VACANTE"
-                                else:
-                                    if np in day['banca']: day['banca'].remove(np)
-                                    m['Nombre'] = np
-                                st.rerun()
+                            if sim_edit_mode and not m.get('IsSupport'):
+                                opts = ["VACANTE"] + sorted(day['banca'])
+                                if pn not in opts and pn != "VACANTE": opts.append(pn)
+                                
+                                try: sel_idx = opts.index(pn)
+                                except: sel_idx = 0
+                                
+                                np = st.selectbox(f"{m['Icon']} {m['Rol']}", opts, index=sel_idx, key=f"sim_{day['id']}_{bn}_{k}", label_visibility="collapsed")
+                                if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
+                                
+                                if np != pn:
+                                    if pn != "VACANTE": day['banca'].append(pn)
+                                    if np == "VACANTE": m['Nombre'] = "VACANTE"
+                                    else:
+                                        if np in day['banca']: day['banca'].remove(np)
+                                        m['Nombre'] = np
+                                    st.rerun()
+                            else:
+                                c = "#FF4B4B" if pn=="VACANTE" else ("#FFA500" if m.get('IsSupport') else "#FFF")
+                                st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
                     idx += 1
                 st.markdown("---")
@@ -544,8 +529,13 @@ with t3:
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                     
                     if em and not m.get('IsSupport'):
-                        opts = [pn, "[QUITAR / VACANTE]"] + sorted(res['b'])
-                        np = st.selectbox(f"{m['Icon']}", opts, key=f"s_{bn}_{i}", label_visibility="collapsed")
+                        opts = ["VACANTE"] + sorted(res['b'])
+                        if pn not in opts and pn != "VACANTE": opts.append(pn)
+                        
+                        try: idx_sel = opts.index(pn)
+                        except: idx_sel = 0
+                        
+                        np = st.selectbox(f"{m['Icon']}", opts, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
                         
                         if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
 
@@ -553,7 +543,7 @@ with t3:
                             if pn != "VACANTE": 
                                 res['b'].append(pn); res['b'].sort()
                             
-                            if np == "[QUITAR / VACANTE]":
+                            if np == "VACANTE":
                                 m['Nombre'] = "VACANTE"
                             else:
                                 if np in res['b']: res['b'].remove(np)
