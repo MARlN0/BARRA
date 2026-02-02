@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V57", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V58", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -242,33 +242,24 @@ def get_simulation_pdf_bytes(event_name, sim_data):
     if not FPDF: return None
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    
     for day in sim_data:
         pdf.add_page()
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, f"SIMULACION: {event_name} | {day['date_label']}", 0, 1, 'L')
-        pdf.ln(5)
-        
-        # Banca
+        pdf.cell(0, 10, f"SIMULACION: {event_name} | {day['date_label']}", 0, 1, 'L'); pdf.ln(5)
         if day['banca']:
             pdf.set_font("Arial", "I", 10); pdf.set_text_color(200, 0, 0)
             pdf.multi_cell(0, 8, f"Banca: {', '.join(sorted(day['banca']))}")
             pdf.set_text_color(0, 0, 0); pdf.ln(5)
-            
-        plan = day['plan']
-        sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
+        plan = day['plan']; sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
         col_w = 90; xl = 10; xr = 110
-        
         for i in range(0, len(sb), 2):
-            yst = pdf.get_y()
-            b1, t1 = sb[i]
+            yst = pdf.get_y(); b1, t1 = sb[i]
             pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
             pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
             for m in t1:
                 r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
                 pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
-            h1 = pdf.get_y() - yst
-            h2 = 0
+            h1 = pdf.get_y() - yst; h2 = 0
             if i+1 < len(sb):
                 b2, t2 = sb[i+1]
                 pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
@@ -278,7 +269,62 @@ def get_simulation_pdf_bytes(event_name, sim_data):
                     pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
                 h2 = pdf.get_y() - yst
             pdf.set_y(yst + max(h1, h2) + 5)
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
+def get_progressive_pdf_bytes(event_name, sim_data):
+    if not FPDF: return None
+    # PDF HORIZONTAL PARA LINEA DE TIEMPO
+    pdf = FPDF(orientation='L')
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 10, f"LINEA DE TIEMPO: {event_name}", 0, 1, 'C')
+    pdf.ln(5)
+
+    # Obtener staff único
+    all_staff = set()
+    for day in sim_data:
+        for team in day['plan'].values():
+            for m in team:
+                if m['Nombre'] != "VACANTE": all_staff.add(m['Nombre'])
+        for p in day['banca']: all_staff.add(p)
+    sorted_staff = sorted(list(all_staff))
+
+    # Cabecera
+    pdf.set_font("Arial", "B", 9)
+    col_width_name = 35
+    page_width = 280 # A4 Landscape aprox width usable
+    remaining_width = page_width - col_width_name
+    num_dates = len(sim_data)
+    col_width_date = remaining_width / num_dates if num_dates > 0 else 20
+
+    pdf.cell(col_width_name, 10, "PERSONAL", 1, 0, 'C', fill=True)
+    for day in sim_data:
+        pdf.cell(col_width_date, 10, day['date_label'], 1, 0, 'C', fill=True)
+    pdf.ln()
+
+    # Filas
+    pdf.set_font("Arial", "", 8)
+    for p in sorted_staff:
+        pdf.cell(col_width_name, 8, p, 1, 0, 'L')
+        for day in sim_data:
+            status = "VACANTE/OFF"
+            # Buscar en plan
+            found = False
+            for bn, team in day['plan'].items():
+                for m in team:
+                    if m['Nombre'] == p:
+                        role_short = m['Rol'][:3] 
+                        # Limpiar nombre barra para que entre
+                        bar_short = bn[:8] 
+                        status = f"{role_short}-{bar_short}"
+                        found = True; break
+                if found: break
             
+            if not found and p in day['banca']: status = "BANCA"
+            
+            pdf.cell(col_width_date, 8, status, 1, 0, 'C')
+        pdf.ln()
+        
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 def get_img_bytes(evento, fecha, plan):
@@ -351,7 +397,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V57")
+st.title("🍸 Barra Staff V58")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -493,13 +539,23 @@ with t3:
             st.rerun()
 
         if 'sim_data' in st.session_state:
-            # BOTÓN EXPORTAR PDF
-            if st.button("📄 Exportar Plan Completo (PDF)", use_container_width=True):
-                if FPDF:
-                    pdf_sim = get_simulation_pdf_bytes(oe, st.session_state['sim_data'])
-                    b64 = base64.b64encode(pdf_sim).decode()
-                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="Plan_Simulado_{oe}.pdf">CLICK AQUÍ PARA DESCARGAR PLAN</a>'
-                    st.markdown(href, unsafe_allow_html=True)
+            # BOTONES DE EXPORTACIÓN (DOS OPCIONES)
+            c_exp1, c_exp2 = st.columns(2)
+            with c_exp1:
+                if st.button("📄 Exportar Plan Diario (PDF)", use_container_width=True):
+                    if FPDF:
+                        pdf_sim = get_simulation_pdf_bytes(oe, st.session_state['sim_data'])
+                        b64 = base64.b64encode(pdf_sim).decode()
+                        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Plan_Diario_{oe}.pdf">CLICK AQUÍ PARA DESCARGAR PLAN</a>'
+                        st.markdown(href, unsafe_allow_html=True)
+            
+            with c_exp2:
+                if st.button("📄 Exportar Línea de Tiempo (Por Persona)", use_container_width=True):
+                    if FPDF:
+                        pdf_prog = get_progressive_pdf_bytes(oe, st.session_state['sim_data'])
+                        b64 = base64.b64encode(pdf_prog).decode()
+                        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Linea_Tiempo_{oe}.pdf">CLICK AQUÍ PARA DESCARGAR LINEA</a>'
+                        st.markdown(href, unsafe_allow_html=True)
             
             st.markdown("---")
             
