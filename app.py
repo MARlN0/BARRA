@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V52", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V53", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -38,7 +38,7 @@ st.markdown("""
     .row-person { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #333; }
     .role-badge { background-color: #333; color: #DDD; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .name-text { font-weight: bold; font-size: 0.95rem; }
-    .ghost-text { font-size: 0.7rem; color: #BBB; font-style: italic; display: block; margin-top: 2px; line-height: 1.1; }
+    .ghost-text { font-size: 0.7rem; color: #AAA; font-style: italic; display: block; text-align: right; margin-top: 2px; }
     .danger-zone { border: 1px solid #ff4b4b; padding: 10px; border-radius: 5px; background-color: rgba(255, 75, 75, 0.1); margin-top: 5px; margin-bottom: 5px; }
     [data-testid="stDataEditor"] th[aria-label="Nombre"] { min-width: 140px !important; max-width: 140px !important; }
 
@@ -123,24 +123,15 @@ def get_detailed_history(person_name, event_name):
     return ""
 
 def calculate_rotation_scores(event_name):
-    """
-    Analiza TODO el historial para calcular hace cuánto no va una persona a una barra.
-    Retorna: { 'NombrePersona': { 'NombreBarra': Dias_Desde_Ultima_Vez } }
-    """
-    scores = {} # Score alto = Hace mucho no va (Prioridad)
-    
-    # Inicializar con un valor alto (nunca ha ido)
+    scores = {} 
     all_bars = set()
     if event_name in st.session_state.db_eventos:
         for b in st.session_state.db_eventos[event_name]['Barras']:
             all_bars.add(clean_str(b['nombre']))
             
     for p in st.session_state.db_staff['Nombre']:
-        scores[clean_str(p)] = {b: 1000 for b in all_bars} # 1000 = Nunca
+        scores[clean_str(p)] = {b: 1000 for b in all_bars}
 
-    # Recorrer historial (del más reciente al más antiguo)
-    # Valor reciente = 0 (Acaba de ir). Valor antiguo = Alto.
-    
     visit_count = 0
     for log in reversed(st.session_state.db_logs):
         if log['Evento'] == event_name:
@@ -150,22 +141,15 @@ def calculate_rotation_scores(event_name):
                 for member in team:
                     p_clean = clean_str(member['Nombre'])
                     if p_clean in scores and b_clean in scores[p_clean]:
-                        # Si es la primera vez que lo encontramos (yendo hacia atrás), es su visita más reciente
                         if scores[p_clean][b_clean] == 1000:
-                            scores[p_clean][b_clean] = visit_count # 1 = ultima vez, 2 = penultima...
-    
+                            scores[p_clean][b_clean] = visit_count 
     return scores
 
 # --- 5. ALGORITMO DE ROTACIÓN ÓPTIMA ---
 def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
     ed = st.session_state.db_eventos[event_name]
-    
-    # Si estamos simulando, usamos logs temporales, si no, los reales
     logs_source = simulated_logs if simulation_mode else st.session_state.db_logs
     
-    # 1. Calcular Scores de Rotación (LRU - Least Recently Used)
-    # Necesitamos reconstruir los scores basados en los logs proporcionados
-    # (Copie lógica de calculate_rotation_scores adaptada a logs dinámicos)
     rotation_scores = {}
     all_bars = set(clean_str(b['nombre']) for b in ed['Barras'])
     for p in ed['Staff_Convocado']:
@@ -192,33 +176,20 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
         team = []
         
         def pick(role_l, role_i, check_col):
-            # Candidatos base
             cands = mat[(mat[check_col]==True) & (~mat['Nombre'].isin(assigned))]
             valid_candidates = []
-            
-            # Lista de candidatos con sus puntajes para esta barra
             scored_candidates = [] 
             
             for _, r in cands.iterrows():
                 p = r['Nombre']; p_clean = clean_str(p)
-                
-                # REGLA 1: BLOQUEO INMEDIATO (Si estuvo la vez pasada = Score 1)
                 last_visit = rotation_scores.get(p_clean, {}).get(bn, 1000)
-                
-                if last_visit == 1: 
-                    continue # Estuvo la fecha anterior -> DESCARTAR
-                
-                # Guardamos candidato y su puntaje (mientras mas alto, mejor)
+                if last_visit == 1: continue 
                 scored_candidates.append((p, last_visit))
             
             if scored_candidates:
-                # REGLA 2: ELEGIR EL QUE HACE MÁS TIEMPO NO VIENE
-                # Ordenar por puntaje descendente (1000 primero, luego 5, 4...)
-                # Si hay empate, mezclar para aleatoriedad
-                random.shuffle(scored_candidates) # Mezclar primero para romper empates al azar
+                random.shuffle(scored_candidates)
                 scored_candidates.sort(key=lambda x: x[1], reverse=True)
-                
-                chosen = scored_candidates[0][0] # El mejor candidato
+                chosen = scored_candidates[0][0]
                 assigned.add(chosen)
                 team.append({'Rol': role_l, 'Icon': role_i, 'Nombre': chosen, 'IsSupport': False})
             else:
@@ -329,7 +300,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V52")
+st.title("🍸 Barra Staff V53")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -454,31 +425,22 @@ with t3:
         st.session_state.temp = {'p': p, 'b': b, 'e': oe, 'd': od}
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # --- SIMULACIÓN (NUEVO) ---
     with st.expander("🔮 Simular Próximas 5 Fechas (Plan de Rotación)"):
         if st.button("Correr Simulación"):
-            # Crear una copia temporal de logs para simular
             temp_logs_sim = list(st.session_state.db_logs)
             st.write("### Plan Sugerido:")
-            
             for i in range(1, 6):
-                # Simular fecha futura
                 future_date = od + timedelta(days=i)
-                # Ejecutar algoritmo con memoria temporal
                 sim_plan, _ = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs_sim)
-                
                 st.markdown(f"**Fecha {i} ({future_date.strftime('%d/%m')}):**")
-                
-                # Crear mini tabla visual
-                cols_sim = st.columns(3)
-                idx_s = 0
+                cols_sim = st.columns(3); idx_s = 0
                 for bn, tm in sim_plan.items():
                     with cols_sim[idx_s % 3]:
-                        enc_names = [m['Nombre'] for m in tm if 'Encargado' in m['Rol']]
-                        st.caption(f"{bn}: {', '.join(enc_names)}")
+                        st.markdown(f"**{bn}**")
+                        for m in tm:
+                            if m['Nombre'] != "VACANTE":
+                                st.caption(f"{m['Icon']} {m['Nombre']}")
                     idx_s += 1
-                
-                # Agregar este resultado a los logs temporales para que la siguiente iteración lo considere
                 temp_logs_sim.append({'Fecha': str(future_date), 'Evento': oe, 'Plan': sim_plan})
                 st.divider()
 
@@ -520,8 +482,11 @@ with t3:
                         if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
 
                         if np != pn:
-                            if pn != "VACANTE": res['b'].append(pn); res['b'].sort()
-                            if np == "[QUITAR / VACANTE]": m['Nombre'] = "VACANTE"
+                            if pn != "VACANTE": 
+                                res['b'].append(pn); res['b'].sort()
+                            
+                            if np == "[QUITAR / VACANTE]":
+                                m['Nombre'] = "VACANTE"
                             else:
                                 if np in res['b']: res['b'].remove(np)
                                 m['Nombre'] = np
