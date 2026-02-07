@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V59", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V61", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -156,6 +156,8 @@ def calculate_rotation_scores(event_name):
 
 # --- 5. ALGORITMO DE ROTACIÓN ---
 def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
+    if event_name not in st.session_state.db_eventos: return {}, [] # Safety check
+    
     ed = st.session_state.db_eventos[event_name]
     logs_source = simulated_logs if simulation_mode else st.session_state.db_logs
     
@@ -213,26 +215,41 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
 
 # --- 6. EXPORT ---
 def safe_encode(text):
-    return str(text).encode('latin-1', 'replace').decode('latin-1')
+    # SOLUCIÓN DEFINITIVA PARA LA Ñ Y TILDES EN FPDF
+    # Reemplazo manual por códigos de caracteres ISO-8859-1 (Latin-1)
+    replacements = {
+        "Ñ": chr(209), "ñ": chr(241),
+        "Á": chr(193), "á": chr(225),
+        "É": chr(201), "é": chr(233),
+        "Í": chr(205), "í": chr(237),
+        "Ó": chr(211), "ó": chr(243),
+        "Ú": chr(218), "ú": chr(250),
+    }
+    s = str(text)
+    for char, code in replacements.items():
+        s = s.replace(char, code)
+    
+    # Finalmente codificar a latin-1 ignorando otros raros para evitar crash
+    return s.encode('latin-1', 'ignore').decode('latin-1')
 
 def get_pdf_bytes(evento, fecha, plan):
     if not FPDF: return None
-    pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", "B", 14) # Helvetica es más seguro
     pdf.cell(0, 10, safe_encode(f"EVENTO: {evento} | {fecha}"), 0, 1, 'L'); pdf.ln(5)
     sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
     pdf.set_text_color(0,0,0); col_w = 90; xl = 10; xr = 110
     for i in range(0, len(sb), 2):
         if pdf.get_y() > 250: pdf.add_page()
         yst = pdf.get_y()
-        b1, t1 = sb[i]; pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-        pdf.cell(col_w, 8, safe_encode(b1), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+        b1, t1 = sb[i]; pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(col_w, 8, safe_encode(b1), 1, 1, 'L', fill=True); pdf.set_font("Helvetica", "", 10)
         for m in t1:
             r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
             pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
         h1 = pdf.get_y() - yst
         if i+1 < len(sb):
-            b2, t2 = sb[i+1]; pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-            pdf.cell(col_w, 8, safe_encode(b2), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+            b2, t2 = sb[i+1]; pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(col_w, 8, safe_encode(b2), 1, 1, 'L', fill=True); pdf.set_font("Helvetica", "", 10)
             for m in t2:
                 r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
                 pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
@@ -247,26 +264,26 @@ def get_simulation_pdf_bytes(event_name, sim_data):
     pdf.set_auto_page_break(auto=True, margin=15)
     for day in sim_data:
         pdf.add_page()
-        pdf.set_font("Arial", "B", 14)
+        pdf.set_font("Helvetica", "B", 14)
         pdf.cell(0, 10, safe_encode(f"SIMULACION: {event_name} | {day['date_label']}"), 0, 1, 'L'); pdf.ln(5)
         if day['banca']:
-            pdf.set_font("Arial", "I", 10); pdf.set_text_color(200, 0, 0)
+            pdf.set_font("Helvetica", "I", 10); pdf.set_text_color(200, 0, 0)
             pdf.multi_cell(0, 8, safe_encode(f"Banca: {', '.join(sorted(day['banca']))}"))
             pdf.set_text_color(0, 0, 0); pdf.ln(5)
         plan = day['plan']; sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
         col_w = 90; xl = 10; xr = 110
         for i in range(0, len(sb), 2):
             yst = pdf.get_y(); b1, t1 = sb[i]
-            pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-            pdf.cell(col_w, 8, safe_encode(b1), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+            pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(col_w, 8, safe_encode(b1), 1, 1, 'L', fill=True); pdf.set_font("Helvetica", "", 10)
             for m in t1:
                 r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
                 pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
             h1 = pdf.get_y() - yst; h2 = 0
             if i+1 < len(sb):
                 b2, t2 = sb[i+1]
-                pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-                pdf.cell(col_w, 8, safe_encode(b2), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+                pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(col_w, 8, safe_encode(b2), 1, 1, 'L', fill=True); pdf.set_font("Helvetica", "", 10)
                 for m in t2:
                     r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
                     pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
@@ -278,7 +295,7 @@ def get_progressive_pdf_bytes(event_name, sim_data):
     if not FPDF: return None
     pdf = FPDF(orientation='L')
     pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
+    pdf.set_font("Helvetica", "B", 14)
     pdf.cell(0, 10, safe_encode(f"LINEA DE TIEMPO: {event_name}"), 0, 1, 'C')
     pdf.ln(5)
 
@@ -290,7 +307,7 @@ def get_progressive_pdf_bytes(event_name, sim_data):
         for p in day['banca']: all_staff.add(p)
     sorted_staff = sorted(list(all_staff))
 
-    pdf.set_font("Arial", "B", 9)
+    pdf.set_font("Helvetica", "B", 9)
     col_width_name = 35
     page_width = 280 
     remaining_width = page_width - col_width_name
@@ -302,7 +319,7 @@ def get_progressive_pdf_bytes(event_name, sim_data):
         pdf.cell(col_width_date, 10, safe_encode(day['date_label']), 1, 0, 'C', fill=True)
     pdf.ln()
 
-    pdf.set_font("Arial", "", 8)
+    pdf.set_font("Helvetica", "", 8)
     for p in sorted_staff:
         pdf.cell(col_width_name, 8, safe_encode(p), 1, 0, 'L')
         for day in sim_data:
@@ -354,12 +371,12 @@ def get_img_bytes(evento, fecha, plan):
 # --- 7. REPORTE GESTIÓN ---
 def generate_config_pdf(event_name, staff_list, bars_data):
     if not FPDF: return None
-    pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", "B", 14)
     pdf.cell(0, 10, safe_encode(f"INFORME DE GESTION: {event_name}"), 0, 1, 'C'); pdf.ln(5)
     for b in bars_data:
-        pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 12)
+        pdf.set_fill_color(220, 220, 220); pdf.set_font("Helvetica", "B", 12)
         pdf.cell(0, 8, safe_encode(f"BARRA: {b['nombre'].upper()}"), 1, 1, 'L', fill=True)
-        pdf.set_font("Arial", "", 10)
+        pdf.set_font("Helvetica", "", 10)
         mat = pd.DataFrame(b['matriz_competencias'])
         mat = mat[mat['Nombre'].isin(staff_list)]
         encs = mat[mat['Es_Encargado']==True]['Nombre'].tolist()
@@ -391,7 +408,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V59")
+st.title("🍸 Barra Staff V61")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -423,6 +440,8 @@ with t2:
     if not evs: st.stop()
     curr_ev = st.selectbox("Evento:", evs); evd = st.session_state.db_eventos[curr_ev]
     
+    if curr_ev not in st.session_state.db_eventos: st.rerun() # SAFETY CHECK PARA EVITAR PANTALLA ROJA
+
     with st.expander("Opciones de Evento"): 
         def del_ev_act(): del st.session_state.db_eventos[curr_ev]; save_data()
         delete_confirm_ui("del_ev", del_ev_act, f"Eliminar Evento '{curr_ev}'")
