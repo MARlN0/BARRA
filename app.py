@@ -16,7 +16,7 @@ except ImportError:
     FPDF = None
 
 # --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="Barra Staff V58", page_icon="🍸", layout="wide")
+st.set_page_config(page_title="Barra Staff V59", page_icon="🍸", layout="wide")
 
 st.markdown("""
     <style>
@@ -212,27 +212,30 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
     return allo, banca
 
 # --- 6. EXPORT ---
+def safe_encode(text):
+    return str(text).encode('latin-1', 'replace').decode('latin-1')
+
 def get_pdf_bytes(evento, fecha, plan):
     if not FPDF: return None
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"EVENTO: {evento} | {fecha}", 0, 1, 'L'); pdf.ln(5)
+    pdf.cell(0, 10, safe_encode(f"EVENTO: {evento} | {fecha}"), 0, 1, 'L'); pdf.ln(5)
     sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
     pdf.set_text_color(0,0,0); col_w = 90; xl = 10; xr = 110
     for i in range(0, len(sb), 2):
         if pdf.get_y() > 250: pdf.add_page()
         yst = pdf.get_y()
         b1, t1 = sb[i]; pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-        pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+        pdf.cell(col_w, 8, safe_encode(b1), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
         for m in t1:
-            r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
-            pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
+            r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
+            pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
         h1 = pdf.get_y() - yst
         if i+1 < len(sb):
             b2, t2 = sb[i+1]; pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-            pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+            pdf.cell(col_w, 8, safe_encode(b2), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
             for m in t2:
-                r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
-                pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
+                r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
+                pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
             h2 = pdf.get_y() - yst
         else: h2 = 0
         pdf.set_y(yst + max(h1, h2) + 5)
@@ -245,42 +248,40 @@ def get_simulation_pdf_bytes(event_name, sim_data):
     for day in sim_data:
         pdf.add_page()
         pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, f"SIMULACION: {event_name} | {day['date_label']}", 0, 1, 'L'); pdf.ln(5)
+        pdf.cell(0, 10, safe_encode(f"SIMULACION: {event_name} | {day['date_label']}"), 0, 1, 'L'); pdf.ln(5)
         if day['banca']:
             pdf.set_font("Arial", "I", 10); pdf.set_text_color(200, 0, 0)
-            pdf.multi_cell(0, 8, f"Banca: {', '.join(sorted(day['banca']))}")
+            pdf.multi_cell(0, 8, safe_encode(f"Banca: {', '.join(sorted(day['banca']))}"))
             pdf.set_text_color(0, 0, 0); pdf.ln(5)
         plan = day['plan']; sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
         col_w = 90; xl = 10; xr = 110
         for i in range(0, len(sb), 2):
             yst = pdf.get_y(); b1, t1 = sb[i]
             pdf.set_xy(xl, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-            pdf.cell(col_w, 8, b1, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+            pdf.cell(col_w, 8, safe_encode(b1), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
             for m in t1:
-                r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
-                pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
+                r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
+                pdf.set_x(xl); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
             h1 = pdf.get_y() - yst; h2 = 0
             if i+1 < len(sb):
                 b2, t2 = sb[i+1]
                 pdf.set_xy(xr, yst); pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 11)
-                pdf.cell(col_w, 8, b2, 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
+                pdf.cell(col_w, 8, safe_encode(b2), 1, 1, 'L', fill=True); pdf.set_font("Arial", "", 10)
                 for m in t2:
-                    r = m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy")
-                    pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, m['Nombre'], 1, 1)
+                    r = safe_encode(m['Rol'].replace("👑","").replace("🍺","").replace("🧊","").replace("⚡","Apy"))
+                    pdf.set_x(xr); pdf.cell(30, 7, r, 1); pdf.cell(60, 7, safe_encode(m['Nombre']), 1, 1)
                 h2 = pdf.get_y() - yst
             pdf.set_y(yst + max(h1, h2) + 5)
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 def get_progressive_pdf_bytes(event_name, sim_data):
     if not FPDF: return None
-    # PDF HORIZONTAL PARA LINEA DE TIEMPO
     pdf = FPDF(orientation='L')
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"LINEA DE TIEMPO: {event_name}", 0, 1, 'C')
+    pdf.cell(0, 10, safe_encode(f"LINEA DE TIEMPO: {event_name}"), 0, 1, 'C')
     pdf.ln(5)
 
-    # Obtener staff único
     all_staff = set()
     for day in sim_data:
         for team in day['plan'].values():
@@ -289,42 +290,35 @@ def get_progressive_pdf_bytes(event_name, sim_data):
         for p in day['banca']: all_staff.add(p)
     sorted_staff = sorted(list(all_staff))
 
-    # Cabecera
     pdf.set_font("Arial", "B", 9)
     col_width_name = 35
-    page_width = 280 # A4 Landscape aprox width usable
+    page_width = 280 
     remaining_width = page_width - col_width_name
     num_dates = len(sim_data)
     col_width_date = remaining_width / num_dates if num_dates > 0 else 20
 
     pdf.cell(col_width_name, 10, "PERSONAL", 1, 0, 'C', fill=True)
     for day in sim_data:
-        pdf.cell(col_width_date, 10, day['date_label'], 1, 0, 'C', fill=True)
+        pdf.cell(col_width_date, 10, safe_encode(day['date_label']), 1, 0, 'C', fill=True)
     pdf.ln()
 
-    # Filas
     pdf.set_font("Arial", "", 8)
     for p in sorted_staff:
-        pdf.cell(col_width_name, 8, p, 1, 0, 'L')
+        pdf.cell(col_width_name, 8, safe_encode(p), 1, 0, 'L')
         for day in sim_data:
             status = "VACANTE/OFF"
-            # Buscar en plan
             found = False
             for bn, team in day['plan'].items():
                 for m in team:
                     if m['Nombre'] == p:
                         role_short = m['Rol'][:3] 
-                        # Limpiar nombre barra para que entre
                         bar_short = bn[:8] 
                         status = f"{role_short}-{bar_short}"
                         found = True; break
                 if found: break
-            
             if not found and p in day['banca']: status = "BANCA"
-            
-            pdf.cell(col_width_date, 8, status, 1, 0, 'C')
+            pdf.cell(col_width_date, 8, safe_encode(status), 1, 0, 'C')
         pdf.ln()
-        
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
 def get_img_bytes(evento, fecha, plan):
@@ -361,19 +355,19 @@ def get_img_bytes(evento, fecha, plan):
 def generate_config_pdf(event_name, staff_list, bars_data):
     if not FPDF: return None
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"INFORME DE GESTION: {event_name}", 0, 1, 'C'); pdf.ln(5)
+    pdf.cell(0, 10, safe_encode(f"INFORME DE GESTION: {event_name}"), 0, 1, 'C'); pdf.ln(5)
     for b in bars_data:
         pdf.set_fill_color(220, 220, 220); pdf.set_font("Arial", "B", 12)
-        pdf.cell(0, 8, f"BARRA: {b['nombre'].upper()}", 1, 1, 'L', fill=True)
+        pdf.cell(0, 8, safe_encode(f"BARRA: {b['nombre'].upper()}"), 1, 1, 'L', fill=True)
         pdf.set_font("Arial", "", 10)
         mat = pd.DataFrame(b['matriz_competencias'])
         mat = mat[mat['Nombre'].isin(staff_list)]
         encs = mat[mat['Es_Encargado']==True]['Nombre'].tolist()
         bars = mat[mat['Es_Bartender']==True]['Nombre'].tolist()
         ayus = mat[mat['Es_Ayudante']==True]['Nombre'].tolist()
-        pdf.multi_cell(0, 6, f"Posibles Encargados: {', '.join(encs)}", 1)
-        pdf.multi_cell(0, 6, f"Posibles Bartenders: {', '.join(bars)}", 1)
-        pdf.multi_cell(0, 6, f"Posibles Ayudantes: {', '.join(ayus)}", 1)
+        pdf.multi_cell(0, 6, safe_encode(f"Posibles Encargados: {', '.join(encs)}"), 1)
+        pdf.multi_cell(0, 6, safe_encode(f"Posibles Bartenders: {', '.join(bars)}"), 1)
+        pdf.multi_cell(0, 6, safe_encode(f"Posibles Ayudantes: {', '.join(ayus)}"), 1)
         pdf.ln(3)
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
@@ -397,7 +391,7 @@ def ordenar_staff(df):
 def agregar_indice(df): d = df.copy(); d.insert(0, "N°", range(1, len(d)+1)); return d
 
 # --- 9. UI ---
-st.title("🍸 Barra Staff V58")
+st.title("🍸 Barra Staff V59")
 t1, t2, t3, t4 = st.tabs(["👥 RH", "⚙️ Config", "🚀 Operación", "📂 Hist"])
 
 with t1:
@@ -539,7 +533,7 @@ with t3:
             st.rerun()
 
         if 'sim_data' in st.session_state:
-            # BOTONES DE EXPORTACIÓN (DOS OPCIONES)
+            # BOTONES DE EXPORTACIÓN
             c_exp1, c_exp2 = st.columns(2)
             with c_exp1:
                 if st.button("📄 Exportar Plan Diario (PDF)", use_container_width=True):
