@@ -188,7 +188,6 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
         
         def pick(role_l, role_i, check_col):
             cands = mat[(mat[check_col]==True) & (~mat['Nombre'].isin(assigned))]
-            valid_candidates = []
             scored_candidates = [] 
             for _, r in cands.iterrows():
                 p = r['Nombre']; p_clean = clean_str(p)
@@ -215,8 +214,6 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
 
 # --- 6. EXPORT ---
 def safe_encode(text):
-    # SOLUCIÓN DEFINITIVA PARA LA Ñ Y TILDES EN FPDF
-    # Reemplazo manual por códigos de caracteres ISO-8859-1 (Latin-1)
     replacements = {
         "Ñ": chr(209), "ñ": chr(241),
         "Á": chr(193), "á": chr(225),
@@ -228,13 +225,11 @@ def safe_encode(text):
     s = str(text)
     for char, code in replacements.items():
         s = s.replace(char, code)
-    
-    # Finalmente codificar a latin-1 ignorando otros raros para evitar crash
     return s.encode('latin-1', 'ignore').decode('latin-1')
 
 def get_pdf_bytes(evento, fecha, plan):
     if not FPDF: return None
-    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", "B", 14) # Helvetica es más seguro
+    pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", "B", 14)
     pdf.cell(0, 10, safe_encode(f"EVENTO: {evento} | {fecha}"), 0, 1, 'L'); pdf.ln(5)
     sb = sorted(plan.items(), key=lambda x: len(x[1]), reverse=True)
     pdf.set_text_color(0,0,0); col_w = 90; xl = 10; xr = 110
@@ -368,7 +363,6 @@ def get_img_bytes(evento, fecha, plan):
         curr_y += max(h1, h2) + P
     b = io.BytesIO(); img.save(b, format="PNG"); return b.getvalue()
 
-# --- 7. REPORTE GESTIÓN ---
 def generate_config_pdf(event_name, staff_list, bars_data):
     if not FPDF: return None
     pdf = FPDF(); pdf.add_page(); pdf.set_font("Helvetica", "B", 14)
@@ -388,7 +382,6 @@ def generate_config_pdf(event_name, staff_list, bars_data):
         pdf.ln(3)
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- 8. UTILS ---
 def delete_confirm_ui(key, action, label):
     if f"ds_{key}" not in st.session_state: st.session_state[f"ds_{key}"] = False
     if not st.session_state[f"ds_{key}"]:
@@ -440,7 +433,7 @@ with t2:
     if not evs: st.stop()
     curr_ev = st.selectbox("Evento:", evs); evd = st.session_state.db_eventos[curr_ev]
     
-    if curr_ev not in st.session_state.db_eventos: st.rerun() # SAFETY CHECK PARA EVITAR PANTALLA ROJA
+    if curr_ev not in st.session_state.db_eventos: st.rerun()
 
     with st.expander("Opciones de Evento"): 
         def del_ev_act(): del st.session_state.db_eventos[curr_ev]; save_data()
@@ -462,21 +455,44 @@ with t2:
 
     st.markdown("---")
     st.write("#### 2. Barras")
-    with st.expander("➕ Añadir Barra"):
-        bn = st.text_input("Nombre Barra"); c1, c2, c3 = st.columns(3)
-        ne = c1.number_input("Enc", 0, 5, 1); nb = c2.number_input("Bar", 0, 5, 1); na = c3.number_input("Ayu", 0, 5, 1)
-        lok = evd['Staff_Convocado']
-        if lok:
+    
+    # --- SECCIÓN CORREGIDA: AÑADIR BARRA ---
+    with st.expander("➕ Añadir Barra", expanded=False):
+        bn_new = st.text_input("Nombre Barra", key="new_bar_name")
+        c1, c2, c3 = st.columns(3)
+        ne_new = c1.number_input("Enc", 0, 5, 1, key="new_bar_enc")
+        nb_new = c2.number_input("Bar", 0, 5, 1, key="new_bar_bar")
+        na_new = c3.number_input("Ayu", 0, 5, 1, key="new_bar_ayu")
+        
+        lok = evd.get('Staff_Convocado', [])
+        
+        if not lok:
+            st.warning("⚠️ Primero debes seleccionar y GUARDAR la Plantilla (Paso 1) para configurar competencias.")
+        else:
+            st.info("Configura quién puede ocupar cada rol en esta barra:")
             dfm = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)].copy()
             dfm['Es_Encargado']=False; dfm['Es_Bartender']=dfm['Cargo_Default']=='BARTENDER'; dfm['Es_Ayudante']=dfm['Cargo_Default']=='AYUDANTE'
             dfm = ordenar_staff(dfm)
-            em = st.data_editor(
+            
+            em_new = st.data_editor(
                 agregar_indice(dfm[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
                 column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
-                use_container_width=True, hide_index=True, height=calc_altura(dfm)
+                use_container_width=True, hide_index=True, height=calc_altura(dfm),
+                key="editor_new_bar"
             )
-            if st.button("Guardar Barra"):
-                st.session_state.db_eventos[curr_ev]['Barras'].append({'nombre': bn, 'requerimientos': {'enc': ne, 'bar': nb, 'ayu': na}, 'matriz_competencias': em.drop('N°', axis=1).to_dict(orient='records')}); save_data(); st.rerun()
+            
+            if st.button("🚀 GUARDAR NUEVA BARRA", type="primary", use_container_width=True):
+                if bn_new:
+                    nueva_barra = {
+                        'nombre': bn_new, 
+                        'requerimientos': {'enc': ne_new, 'bar': nb_new, 'ayu': na_new}, 
+                        'matriz_competencias': em_new.drop('N°', axis=1).to_dict(orient='records')
+                    }
+                    st.session_state.db_eventos[curr_ev]['Barras'].append(nueva_barra)
+                    save_data(); st.success(f"Barra '{bn_new}' añadida!"); st.rerun()
+                else:
+                    st.error("Escribe un nombre para la barra")
+    # --- FIN CORRECCIÓN ---
 
     for i, b in enumerate(evd['Barras']):
         with st.expander(f"✏️ {b['nombre']}"):
@@ -492,7 +508,8 @@ with t2:
                 eb = st.data_editor(
                     agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
                     column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
-                    use_container_width=True, hide_index=True, height=calc_altura(m)
+                    use_container_width=True, hide_index=True, height=calc_altura(m),
+                    key=f"ed_edit_{i}"
                 )
                 if st.form_submit_button("💾 Actualizar Datos"):
                     st.session_state.db_eventos[curr_ev]['Barras'][i]['nombre'] = new_name
@@ -513,7 +530,6 @@ with t2:
             
     st.markdown("---")
     st.write("#### 📂 Respaldo y Restauración")
-    st.info("Usa esto para no perder datos si reinicias.")
     json_str = save_data()
     st.download_button("💾 Descargar Copia de Seguridad", json_str, "copia_seguridad.json", "application/json", type="primary")
     uploaded_file = st.file_uploader("Restaurar copia:", type=['json'])
@@ -529,20 +545,15 @@ with t2:
 with t3:
     c1, c2 = st.columns(2); od = c1.date_input("Fecha"); oe = c2.selectbox("Evento", list(st.session_state.db_eventos.keys()), key="oe")
     
-    st.markdown('<div class="big-btn">', unsafe_allow_html=True)
     if st.button("🚀 GENERAR TURNO (ROTACIÓN INTELIGENTE)", type="primary"):
         p, b = run_allocation(oe)
         st.session_state.temp = {'p': p, 'b': b, 'e': oe, 'd': od}
-    st.markdown('</div>', unsafe_allow_html=True)
     
-    # --- SIMULACIÓN ---
     with st.expander("🔮 Simular Plan de Rotación"):
         days_to_sim = st.number_input("Cantidad de fechas a simular:", min_value=1, max_value=30, value=5)
-        
         if st.button("🔄 Generar / Reiniciar Simulación"):
             temp_logs = list(st.session_state.db_logs)
             sim_results = []
-            
             for i in range(1, days_to_sim + 1):
                 f_date = od + timedelta(days=i)
                 p_sim, b_sim = run_allocation(oe, simulation_mode=True, simulated_logs=temp_logs)
@@ -552,7 +563,6 @@ with t3:
             st.rerun()
 
         if 'sim_data' in st.session_state:
-            # BOTONES DE EXPORTACIÓN
             c_exp1, c_exp2 = st.columns(2)
             with c_exp1:
                 if st.button("📄 Exportar Plan Diario (PDF)", use_container_width=True):
@@ -561,7 +571,6 @@ with t3:
                         b64 = base64.b64encode(pdf_sim).decode()
                         href = f'<a href="data:application/octet-stream;base64,{b64}" download="Plan_Diario_{oe}.pdf">CLICK AQUÍ PARA DESCARGAR PLAN</a>'
                         st.markdown(href, unsafe_allow_html=True)
-            
             with c_exp2:
                 if st.button("📄 Exportar Línea de Tiempo (Por Persona)", use_container_width=True):
                     if FPDF:
@@ -570,40 +579,28 @@ with t3:
                         href = f'<a href="data:application/octet-stream;base64,{b64}" download="Linea_Tiempo_{oe}.pdf">CLICK AQUÍ PARA DESCARGAR LINEA</a>'
                         st.markdown(href, unsafe_allow_html=True)
             
-            st.markdown("---")
-            
             for i_sim, day in enumerate(st.session_state['sim_data']):
                 st.markdown(f"### 📅 Fecha {day['id']} ({day['date_label']})")
-                
                 if day['banca']: st.warning(f"⚠️ Banca: {', '.join(sorted(day['banca']))}")
-                else: st.success("✅ Full")
-                
                 sim_edit_mode = st.toggle(f"✏️ Editar Día {day['id']}", key=f"tgl_sim_{day['id']}")
-                
                 cols = st.columns(3); idx = 0
                 for bn, tm in day['plan'].items():
                     with cols[idx % 3]:
                         st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                         for k, m in enumerate(tm):
-                            pn = m['Nombre']
-                            ghost = ""
+                            pn = m['Nombre']; ghost = ""
                             if i_sim == 0:
                                 if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
                             else:
                                 prev_day_data = st.session_state['sim_data'][i_sim - 1]
                                 if pn != "VACANTE": ghost = get_simulated_history(pn, prev_day_data)
-
                             if sim_edit_mode and not m.get('IsSupport'):
                                 opts = ["VACANTE"] + sorted(day['banca'])
                                 if pn not in opts and pn != "VACANTE": opts.append(pn)
-                                
                                 try: sel_idx = opts.index(pn)
                                 except: sel_idx = 0
-                                
                                 np = st.selectbox(f"{m['Icon']} {m['Rol']}", opts, index=sel_idx, key=f"sim_{day['id']}_{bn}_{k}", label_visibility="collapsed")
-                                
                                 if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
-
                                 if np != pn:
                                     if pn != "VACANTE": day['banca'].append(pn)
                                     if np == "VACANTE": m['Nombre'] = "VACANTE"
@@ -616,14 +613,10 @@ with t3:
                                 st.markdown(f"<div class='row-person'><span class='role-badge'>{m['Icon']} {m['Rol']}</span><div style='text-align:right'><div class='name-text' style='color:{c}'>{pn}</div><div class='ghost-text'>{ghost}</div></div></div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
                     idx += 1
-                st.markdown("---")
 
     if 'temp' in st.session_state and st.session_state.temp['e'] == oe:
         res = st.session_state.temp
-        
         if res['b']: st.warning(f"⚠️ Banca: {', '.join(res['b'])}")
-        else: st.success("✅ Full")
-        
         with st.expander("➕ Apoyo"):
             c1, c2 = st.columns(2); ba = c1.selectbox("Barra", list(res['p'].keys())); pa = c2.selectbox("Per", sorted(st.session_state.db_staff['Nombre'].unique()))
             if st.button("Add"): 
@@ -637,7 +630,6 @@ with t3:
             c1.download_button("📄 PDF", pdf, "p.pdf", "application/pdf", use_container_width=True, type="primary")
         img = get_img_bytes(res['e'], str(res['d']), res['p'])
         c2.download_button("📷 IMG", img, "p.png", "image/png", use_container_width=True, type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
         
         em = st.toggle("✏️ Edit")
         cols = st.columns(3); idx = 0
@@ -645,27 +637,18 @@ with t3:
             with cols[idx%3]:
                 st.markdown(f"<div class='plan-card'><div class='barra-title'>{bn}</div>", unsafe_allow_html=True)
                 for i, m in enumerate(tm):
-                    pn = m['Nombre']
-                    ghost = ""
+                    pn = m['Nombre']; ghost = ""; 
                     if pn != "VACANTE": ghost = get_detailed_history(pn, oe)
-                    
                     if em and not m.get('IsSupport'):
                         opts = ["VACANTE"] + sorted(res['b'])
                         if pn not in opts and pn != "VACANTE": opts.append(pn)
-                        
                         try: idx_sel = opts.index(pn)
                         except: idx_sel = 0
-                        
                         np = st.selectbox(f"{m['Icon']}", opts, index=idx_sel, key=f"s_{bn}_{i}", label_visibility="collapsed")
-                        
                         if ghost: st.markdown(f"<div class='ghost-text'>{ghost}</div>", unsafe_allow_html=True)
-
                         if np != pn:
-                            if pn != "VACANTE": 
-                                res['b'].append(pn); res['b'].sort()
-                            
-                            if np == "VACANTE":
-                                m['Nombre'] = "VACANTE"
+                            if pn != "VACANTE": res['b'].append(pn); res['b'].sort()
+                            if np == "VACANTE": m['Nombre'] = "VACANTE"
                             else:
                                 if np in res['b']: res['b'].remove(np)
                                 m['Nombre'] = np
@@ -688,13 +671,11 @@ with t4:
             with st.expander(f"📅 {l['Fecha']} - {l['Evento']}"):
                 def del_log_act(idx=rx): st.session_state.db_logs.pop(idx); save_data()
                 delete_confirm_ui(f"del_log_{rx}", lambda: del_log_act(rx), "Eliminar Registro")
-                
                 if FPDF:
                     p = get_pdf_bytes(l['Evento'], l['Fecha'], l['Plan'])
                     st.download_button("📄 PDF", p, "h.pdf", "application/pdf", key=f"p_{rx}", type="primary")
                 ib = get_img_bytes(l['Evento'], l['Fecha'], l['Plan'])
                 st.download_button("📷 IMG", ib, "h.png", "image/png", key=f"i_{rx}", type="primary")
-                
                 cols = st.columns(3); idx = 0
                 for bn, tm in l['Plan'].items():
                     with cols[idx%3]:
