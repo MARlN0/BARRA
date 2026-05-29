@@ -530,10 +530,11 @@ with t2:
         with st.expander(f"✏️ {b['nombre']}"):
             with st.form(f"form_bar_{i}"):
                 c_meta_1, c_meta_2, c_meta_3, c_meta_4 = st.columns([3, 1, 1, 1])
-                new_name = c_meta_1.text_input("Nombre", b['nombre'])
-                new_enc = c_meta_2.number_input("E", 0, 5, b['requerimientos']['enc'])
-                new_bar = c_meta_3.number_input("B", 0, 5, b['requerimientos']['bar'])
-                new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'])
+                # SOLUCIÓN DE LAS "LLAVES": Identificadores únicos para evitar que Streamlit cruce las barras
+                new_name = c_meta_1.text_input("Nombre", b['nombre'], key=f"name_{curr_ev}_{i}")
+                new_enc = c_meta_2.number_input("E", 0, 5, b['requerimientos']['enc'], key=f"e_{curr_ev}_{i}")
+                new_bar = c_meta_3.number_input("B", 0, 5, b['requerimientos']['bar'], key=f"b_{curr_ev}_{i}")
+                new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'], key=f"a_{curr_ev}_{i}")
                 
                 dfc = pd.DataFrame(b['matriz_competencias'])
                 if 'Nombre' not in dfc.columns: 
@@ -542,11 +543,9 @@ with t2:
                 dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
                 m = pd.merge(dfr, dfc, on='Nombre', how='left')
                 
-                # --- AQUÍ ESTÁ LA CORRECCIÓN DE PANDAS ---
                 m['Es_Encargado'] = m['Es_Encargado'].fillna(False)
                 m['Es_Bartender'] = m['Es_Bartender'].fillna(m['Cargo_Default'] == 'BARTENDER')
                 m['Es_Ayudante'] = m['Es_Ayudante'].fillna(m['Cargo_Default'] == 'AYUDANTE')
-                # ------------------------------------------
 
                 eb = st.data_editor(
                     agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
