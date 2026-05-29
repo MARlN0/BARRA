@@ -208,6 +208,9 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
     for barra in ed['Barras']:
         bn = clean_str(barra['nombre']); req = barra['requerimientos']; mat = barra['matriz_competencias']
         if not isinstance(mat, pd.DataFrame): mat = pd.DataFrame(mat)
+        # PARCHE DE SEGURIDAD 1
+        if 'Nombre' not in mat.columns: mat = pd.DataFrame(columns=['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante'])
+        
         mat = mat[mat['Nombre'].isin(active)] 
         team = []
         
@@ -396,7 +399,11 @@ def generate_config_pdf(event_name, staff_list, bars_data):
         pdf.set_fill_color(220, 220, 220); pdf.set_font("Helvetica", "B", 12)
         pdf.cell(0, 8, safe_encode(f"BARRA: {b['nombre'].upper()}"), 1, 1, 'L', fill=True)
         pdf.set_font("Helvetica", "", 10)
+        
         mat = pd.DataFrame(b['matriz_competencias'])
+        # PARCHE DE SEGURIDAD 2
+        if 'Nombre' not in mat.columns: mat = pd.DataFrame(columns=['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante'])
+        
         mat = mat[mat['Nombre'].isin(staff_list)]
         encs = mat[mat['Es_Encargado']==True]['Nombre'].tolist()
         bars = mat[mat['Es_Bartender']==True]['Nombre'].tolist()
@@ -525,7 +532,13 @@ with t2:
                 new_enc = c_meta_2.number_input("E", 0, 5, b['requerimientos']['enc'])
                 new_bar = c_meta_3.number_input("B", 0, 5, b['requerimientos']['bar'])
                 new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'])
-                dfc = pd.DataFrame(b['matriz_competencias']); dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
+                
+                dfc = pd.DataFrame(b['matriz_competencias'])
+                # PARCHE DE SEGURIDAD 3: Evita que el merge crashee si la matriz está vacía
+                if 'Nombre' not in dfc.columns: 
+                    dfc = pd.DataFrame(columns=['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante'])
+                
+                dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
                 m = pd.merge(dfr, dfc, on='Nombre', how='left')
                 m['Es_Encargado'].fillna(False, inplace=True); m['Es_Bartender'].fillna(m['Cargo_Default']=='BARTENDER', inplace=True); m['Es_Ayudante'].fillna(m['Cargo_Default']=='AYUDANTE', inplace=True)
                 eb = st.data_editor(
