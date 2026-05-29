@@ -202,7 +202,8 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
                 bc = clean_str(bn)
                 for m in tm:
                     pc = clean_str(m['Nombre'])
-                    if pc in rotation_scores && bc in rotation_scores[pc]:
+                    # CORRECCIÓN AQUÍ: Se cambió && por and
+                    if pc in rotation_scores and bc in rotation_scores[pc]:
                         if rotation_scores[pc][bc] == 1000:
                             rotation_scores[pc][bc] = visit_idx
 
