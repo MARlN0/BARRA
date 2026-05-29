@@ -73,6 +73,15 @@ def clean_str(s): return str(s).strip().upper() if s else ""
 def calc_altura(df): return (len(df) * 38) + 38
 
 def load_data():
+    def get_default_bars():
+        return [
+            {'nombre': 'GENERAL', 'requerimientos': {'enc': 1, 'bar': 1, 'ayu': 1}, 'matriz_competencias': []},
+            {'nombre': 'TANQUERAY', 'requerimientos': {'enc': 1, 'bar': 1, 'ayu': 1}, 'matriz_competencias': []},
+            {'nombre': 'DON JULIO', 'requerimientos': {'enc': 1, 'bar': 1, 'ayu': 1}, 'matriz_competencias': []},
+            {'nombre': 'INTIPALKA', 'requerimientos': {'enc': 1, 'bar': 1, 'ayu': 1}, 'matriz_competencias': []},
+            {'nombre': 'JW', 'requerimientos': {'enc': 1, 'bar': 1, 'ayu': 1}, 'matriz_competencias': []}
+        ]
+
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, 'r') as f:
@@ -81,6 +90,12 @@ def load_data():
                 evs = d['eventos']
                 for e in evs.values():
                     for b in e['Barras']: b['matriz_competencias'] = pd.DataFrame(b['matriz_competencias'])
+                
+                # Inyectar eventos predeterminados si es la primera vez (evita que reaparezcan si los borras a propósito)
+                if not d.get('v61_migrada', False):
+                    if 'HANA' not in evs: evs['HANA'] = {'Staff_Convocado': [], 'Barras': get_default_bars()}
+                    if 'QIU CLUB' not in evs: evs['QIU CLUB'] = {'Staff_Convocado': [], 'Barras': get_default_bars()}
+                    
                 return df, evs, d.get('logs', [])
         except: pass
     
@@ -88,7 +103,11 @@ def load_data():
         'Nombre': ['Forest', 'Gerald', 'Guillermo', 'Jair', 'Kers', 'Kevin', 'Leandro', 'Manuel', 'Marcelo', 'Pedro', 'Sandro', 'Sebastian', 'Franklin', 'Gabriel', 'Jhon', 'Jordi', 'Luis', 'Vladimir'],
         'Cargo_Default': ['BARTENDER']*12 + ['AYUDANTE']*6
     })
-    return default_staff, {}, []
+    default_events = {
+        'HANA': {'Staff_Convocado': [], 'Barras': get_default_bars()},
+        'QIU CLUB': {'Staff_Convocado': [], 'Barras': get_default_bars()}
+    }
+    return default_staff, default_events, []
 
 def save_data():
     s = st.session_state.db_staff.to_dict(orient='records'); ev = {}
@@ -100,7 +119,8 @@ def save_data():
             else: bc['matriz_competencias'] = b['matriz_competencias']
             bs.append(bc)
         ev[k] = {'Staff_Convocado': v['Staff_Convocado'], 'Barras': bs}
-    full_data = {'staff': s, 'eventos': ev, 'logs': st.session_state.db_logs}
+    # Añadimos la llave 'v61_migrada' para recordar que ya hicimos la carga por defecto
+    full_data = {'staff': s, 'eventos': ev, 'logs': st.session_state.db_logs, 'v61_migrada': True}
     with open(DB_FILE, 'w') as f: json.dump(full_data, f, indent=4)
     return json.dumps(full_data, indent=4)
 
@@ -456,7 +476,6 @@ with t2:
     st.markdown("---")
     st.write("#### 2. Barras")
     
-    # --- SECCIÓN CORREGIDA: AÑADIR BARRA ---
     with st.expander("➕ Añadir Barra", expanded=False):
         bn_new = st.text_input("Nombre Barra", key="new_bar_name")
         c1, c2, c3 = st.columns(3)
@@ -492,7 +511,6 @@ with t2:
                     save_data(); st.success(f"Barra '{bn_new}' añadida!"); st.rerun()
                 else:
                     st.error("Escribe un nombre para la barra")
-    # --- FIN CORRECCIÓN ---
 
     for i, b in enumerate(evd['Barras']):
         with st.expander(f"✏️ {b['nombre']}"):
