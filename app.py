@@ -68,7 +68,9 @@ def check_login():
 if not check_login(): st.stop()
 
 # --- 3. DATA & UTILS ---
-DB_FILE = "base_datos_staff.json"
+# SE CAMBIÓ EL NOMBRE AQUÍ PARA FORZAR LA CARGA DE LOS NUEVOS DATOS COMPLETAMENTE LIMPIOS:
+DB_FILE = "base_datos_staff_v2.json"
+
 def clean_str(s): return str(s).strip().upper() if s else ""
 def calc_altura(df): return (len(df) * 38) + 38
 
@@ -202,7 +204,6 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
                 bc = clean_str(bn)
                 for m in tm:
                     pc = clean_str(m['Nombre'])
-                    # CORRECCIÓN AQUÍ: Se cambió && por and
                     if pc in rotation_scores and bc in rotation_scores[pc]:
                         if rotation_scores[pc][bc] == 1000:
                             rotation_scores[pc][bc] = visit_idx
