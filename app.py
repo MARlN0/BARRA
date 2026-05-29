@@ -68,7 +68,6 @@ def check_login():
 if not check_login(): st.stop()
 
 # --- 3. DATA & UTILS ---
-# SE CAMBIÓ EL NOMBRE AQUÍ PARA FORZAR LA CARGA DE LOS NUEVOS DATOS COMPLETAMENTE LIMPIOS:
 DB_FILE = "base_datos_staff_v2.json"
 
 def clean_str(s): return str(s).strip().upper() if s else ""
@@ -542,7 +541,13 @@ with t2:
                 
                 dfr = st.session_state.db_staff[st.session_state.db_staff['Nombre'].isin(lok)][['Nombre', 'Cargo_Default']]
                 m = pd.merge(dfr, dfc, on='Nombre', how='left')
-                m['Es_Encargado'].fillna(False, inplace=True); m['Es_Bartender'].fillna(m['Cargo_Default']=='BARTENDER', inplace=True); m['Es_Ayudante'].fillna(m['Cargo_Default']=='AYUDANTE', inplace=True)
+                
+                # --- AQUÍ ESTÁ LA CORRECCIÓN DE PANDAS ---
+                m['Es_Encargado'] = m['Es_Encargado'].fillna(False)
+                m['Es_Bartender'] = m['Es_Bartender'].fillna(m['Cargo_Default'] == 'BARTENDER')
+                m['Es_Ayudante'] = m['Es_Ayudante'].fillna(m['Cargo_Default'] == 'AYUDANTE')
+                # ------------------------------------------
+
                 eb = st.data_editor(
                     agregar_indice(ordenar_staff(m)[['Nombre','Es_Encargado','Es_Bartender','Es_Ayudante']]), 
                     column_order=("N°", "Nombre", "Es_Encargado", "Es_Bartender", "Es_Ayudante"),
