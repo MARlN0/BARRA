@@ -85,8 +85,11 @@ def load_data():
         except: pass
     
     default_staff = pd.DataFrame({
-        'Nombre': ['Forest', 'Gerald', 'Guillermo', 'Jair', 'Kers', 'Kevin', 'Leandro', 'Manuel', 'Marcelo', 'Pedro', 'Sandro', 'Sebastian', 'Franklin', 'Gabriel', 'Jhon', 'Jordi', 'Luis', 'Vladimir'],
-        'Cargo_Default': ['BARTENDER']*12 + ['AYUDANTE']*6
+        'Nombre': [
+            'Marcelo', 'Sebastian', 'Jair', 'Forest', 'Pedro', 'Fernando', 'Gerald', 'Manuel',
+            'Bryan', 'Ariana', 'Franzuat', 'Jordi'
+        ],
+        'Cargo_Default': ['BARTENDER']*8 + ['AYUDANTE']*4
     })
     return default_staff, {}, []
 
@@ -199,7 +202,7 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
                 bc = clean_str(bn)
                 for m in tm:
                     pc = clean_str(m['Nombre'])
-                    if pc in rotation_scores and bc in rotation_scores[pc]:
+                    if pc in rotation_scores && bc in rotation_scores[pc]:
                         if rotation_scores[pc][bc] == 1000:
                             rotation_scores[pc][bc] = visit_idx
 
@@ -208,7 +211,6 @@ def run_allocation(event_name, simulation_mode=False, simulated_logs=None):
     for barra in ed['Barras']:
         bn = clean_str(barra['nombre']); req = barra['requerimientos']; mat = barra['matriz_competencias']
         if not isinstance(mat, pd.DataFrame): mat = pd.DataFrame(mat)
-        # PARCHE DE SEGURIDAD 1
         if 'Nombre' not in mat.columns: mat = pd.DataFrame(columns=['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante'])
         
         mat = mat[mat['Nombre'].isin(active)] 
@@ -401,7 +403,6 @@ def generate_config_pdf(event_name, staff_list, bars_data):
         pdf.set_font("Helvetica", "", 10)
         
         mat = pd.DataFrame(b['matriz_competencias'])
-        # PARCHE DE SEGURIDAD 2
         if 'Nombre' not in mat.columns: mat = pd.DataFrame(columns=['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante'])
         
         mat = mat[mat['Nombre'].isin(staff_list)]
@@ -534,7 +535,6 @@ with t2:
                 new_ayu = c_meta_4.number_input("A", 0, 5, b['requerimientos']['ayu'])
                 
                 dfc = pd.DataFrame(b['matriz_competencias'])
-                # PARCHE DE SEGURIDAD 3: Evita que el merge crashee si la matriz está vacía
                 if 'Nombre' not in dfc.columns: 
                     dfc = pd.DataFrame(columns=['Nombre', 'Es_Encargado', 'Es_Bartender', 'Es_Ayudante'])
                 
